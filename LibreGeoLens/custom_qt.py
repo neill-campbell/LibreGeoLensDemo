@@ -241,7 +241,7 @@ class ImageDisplayWidget(QWidget):
         if os.name == "nt":  # Windows
             os.startfile(image_path)
         elif os.name == "posix":
-            if "darwin" is os.uname().sysname.lower():
+            if "darwin" == os.uname().sysname.lower():
                 subprocess.run(["open", image_path])  # macOS
             else:
                 subprocess.run(["xdg-open", image_path])  # Linux
