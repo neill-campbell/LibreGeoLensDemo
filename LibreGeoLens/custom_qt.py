@@ -1,5 +1,6 @@
 import os
 import json
+import subprocess
 from PIL import Image
 from qgis.PyQt.QtGui import QPixmap, QImage, QColor
 from qgis.PyQt.QtCore import Qt, QTimer
@@ -225,15 +226,25 @@ class ImageDisplayWidget(QWidget):
                 )
                 if ok:
                     selected_image = image_path if choice == "Screen" else raw_image_path
-                    os.startfile(selected_image)  # Open the selected image using the OS default application
+                    self.open_file(selected_image)  # Open the selected image using the OS default application
             elif screen_image_exists:
-                os.startfile(image_path)  # Open the screen image using the OS default application
+                self.open_file(image_path)  # Open the screen image using the OS default application
             elif raw_image_exists:
-                os.startfile(raw_image_path)  # Open the raw image using the OS default application
+                self.open_file(raw_image_path)  # Open the raw image using the OS default application
             else:
                 QMessageBox.warning(self, "Error", "No available image files to open.")
         else:
             QMessageBox.warning(self, "Error", "Chip has not been sent yet to the MLLM.")
+
+    @staticmethod
+    def open_file(image_path):
+        if os.name == "nt":  # Windows
+            os.startfile(image_path)
+        elif os.name == "posix":
+            if "darwin" is os.uname().sysname.lower():
+                subprocess.run(["open", image_path])  # macOS
+            else:
+                subprocess.run(["xdg-open", image_path])  # Linux
 
     def perform_single_click_action(self):
         """Perform the single-click action after timer expires."""

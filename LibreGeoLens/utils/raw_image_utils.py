@@ -195,6 +195,9 @@ def extract_chip_from_tif_point_in_memory(img_path, center_latitude, center_long
 
         # Build a PIL image
         pil_img = Image.fromarray(data_for_pil, mode=mode)
+        if pil_img.mode != "RGBA":
+            pil_img = pil_img.convert("RGBA")
         data = pil_img.tobytes("raw", "RGBA")
         image_to_send = QImage(data, pil_img.width, pil_img.height, QImage.Format_RGBA8888)
+
         return image_to_send

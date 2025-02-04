@@ -41,30 +41,29 @@ Make sure to restart QGIS so that these changes take effect.
 
 ### Python dependencies
 
-You also need to install the external Python dependencies listed in [requirements.txt](requirements.txt). 
-Install them with either your main Python (Linux, Mac) or through the OSGeo4W shell (Windows), 
-by running the following (if `python` fails try with `python3`):
+You also need to install the external Python dependencies listed in [requirements.txt](requirements.txt).
+
+In Windows, you can use the OSGeo4W shell and run
 ```shell
 python -m pip install -r requirements.txt
 ```
+If this fails, try the instructions for macOS/Linux below.
 
-<details>
-
-<summary>Expand if the OsGeo4W failed.</summary>
-
-If Python cannot be found in the OSGeo4W Shell, you can open QGIS, open the Python Console <img src="resources/media/python_qgis_icon.png" width="20" height="20"> (Ctrl+Alt+P) 
-and find the Python executable directory path with 
+In macOS/Linux or in Windows if the above failed, you need to find the Python that QGIS is using. In order to do so, open QGIS,
+open the Python Console <img src="resources/media/python_qgis_icon.png" width="20" height="20"> (Ctrl+Alt+P)
+and find the Python executable directory path with
 ```python
 import sys
-sys.prefix  # example output: 'C:\\PROGRA~1\\QGIS33~1.13\\apps\\Python312'
+sys.prefix  # example outputs: 'C:\\PROGRA~1\\QGIS33~1.13\\apps\\Python312' (Windows), /Applications/QGIS-LTR.app/Contents/MacOS (macOS)
 ```
-and then in Windows Powershell run  
+and then in Windows Powershell run
 ```
 C:\PROGRA~1\QGIS33~1.13\apps\Python312\python3.exe -m pip install -r "requirements.txt"
 ```
-
-</details>
-
+or in the terminal (macOS, Linux) run
+```
+/Applications/QGIS-LTR.app/Contents/MacOS/bin/python3 -m pip install -r requirements.txt
+```
 
 ### COG streaming (optional)
 
@@ -158,10 +157,18 @@ python create_image_outlines_geojson.py --s3_directories s3://bucket1/path/to/di
 ## Installation from source (for devs)
 
 1. Clone this repo and follow the prerequisites section above.
-2. Find your QGIS local plugins directory and symlink [LibreGeoLens](LibreGeoLens) (the inner directory). For example, in my Windows laptop,
-   I run Command Prompt as an Administrator and used the following:
+2. Find your QGIS local plugins directory and symlink [LibreGeoLens](LibreGeoLens) (the inner directory). For example, in Windows
+   you can run Command Prompt as an Administrator and do:
 ```
-mklink /D "C:\Users\<UserName>\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\LibreGeoLens" "C:\local\path\to\clone\LibreGeoLens"
+mklink /D "C:\Users\<UserName>\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\LibreGeoLens" "C:\local\path\to\LibreGeoLens\LibreGeoLens"
+```
+   In macOS, you can do:
+```
+ln -s /absolute/local/path/to/LibreGeoLens/LibreGeoLens ~/Library/Application\ Support/QGIS/QGIS3/profiles/default/python/plugins/LibreGeoLens
+```
+   In Linux, you can do:
+```
+ln -s /absolute/local/path/to/LibreGeoLens/LibreGeoLens ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/LibreGeoLens
 ```
 
 NOTE: If it's your first time using QGIS, you might need to create the `plugins` directory first.

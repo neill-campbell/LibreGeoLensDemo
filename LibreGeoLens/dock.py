@@ -20,7 +20,7 @@ from .utils import raw_image_utils as ru
 from .custom_qt import (zoom_to_and_flash_feature, CustomTextBrowser, ImageDisplayWidget,
                         AreaDrawingTool, IdentifyDrawnAreaTool)
 
-from qgis.PyQt.QtGui import QPixmap, QImage, QColor, QTextOption
+from qgis.PyQt.QtGui import QPixmap, QImage, QColor, QTextOption, QPalette
 from qgis.PyQt.QtCore import QBuffer, QByteArray, Qt, QSettings, QVariant, QSize
 from qgis.PyQt.QtWidgets import (QSizePolicy, QFileDialog, QMessageBox, QInputDialog, QComboBox, QLabel, QVBoxLayout,
                                  QPushButton, QWidget, QTextEdit, QApplication, QRadioButton, QHBoxLayout, QDockWidget,
@@ -209,7 +209,8 @@ class LibreGeoLensDockWidget(QDockWidget):
 
         settings = QSettings()
         self.qgis_theme = settings.value("UI/UITheme")
-        if self.qgis_theme  in ["Night Mapping", "Blend of Gray"]:
+        is_dark_mode = QApplication.palette().color(QPalette.Window).value() < 128
+        if self.qgis_theme in ["Night Mapping", "Blend of Gray"] or (self.qgis_theme == "default" and is_dark_mode):
             chat_history_styles = """
             background-color: #2b2b2b;
             color: #ffffff;
@@ -221,6 +222,8 @@ class LibreGeoLensDockWidget(QDockWidget):
             """
             self.chat_history.setStyleSheet(chat_history_styles)
             self.image_display_widget.setStyleSheet(image_display_styles)
+            if os.name == "posix":
+                QApplication.instance().setStyleSheet("""QInputDialog, QComboBox, QPushButton, QLabel {color: #D3D3D3;}""")
         else:
             self.text_color = "black"
 
@@ -334,7 +337,8 @@ class LibreGeoLensDockWidget(QDockWidget):
         url_str = url.toString()
         if url_str.startswith("image://"):
             image_path = urllib.parse.unquote(url_str.replace("image://", "", 1))
-            image_path = image_path.replace("/", "\\\\").replace("c\\", "C:\\")
+            if os.name == "nt":
+                image_path = image_path.replace("/", "\\\\").replace("c\\", "C:\\")
             chip_id = ntpath.basename(image_path).split(".")[0].split("_screen")[0]
 
             already_there = False
@@ -413,9 +417,10 @@ class LibreGeoLensDockWidget(QDockWidget):
                     base64_sent_image = self.load_image_base64(image_path.replace("_screen.png", "_raw.png"))
                 else:
                     base64_sent_image = base64_image
+                normalized_path = image_path.replace("\\", "/")
                 image_html = (
                     f'<div style="position: relative; display: inline-block;">'
-                    f'    <a href="image://{image_path.replace("\\", "/")}" style="text-decoration: none;">'
+                    f'    <a href="image://{normalized_path}" style="text-decoration: none;">'
                     f'        <img src="data:image/png;base64,{base64_image}" width="75"/>'
                     f'    </a>'
                     f'    <span style="position: absolute; top: 3px; right: 5px; color: {self.text_color}; font-size: 10px">'
@@ -845,7 +850,12 @@ class LibreGeoLensDockWidget(QDockWidget):
         selected_model = self.model_selection.currentText()
         api_key = os.getenv(selected_api.upper() + "_API_KEY")
         if api_key is None:
-            raise ValueError(f"{selected_api} API key not set. Please refer to the README, section 2.2")
+            QMessageBox.warning(
+                self.iface.mainWindow(), "Error",
+                f"{selected_api} API key not set."
+                f" Please refer to https://github.com/ampsight/LibreGeoLens?tab=readme-ov-file#mllm-services"
+            )
+            return
         client = self.supported_api_clients[selected_api]["class"](api_key=api_key)
 
         prompt = self.prompt_input.toPlainText()
@@ -931,9 +941,10 @@ class LibreGeoLensDockWidget(QDockWidget):
                 base64_send_image = base64_image
 
             images_data.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_send_image}"}})
+            normalized_path = image_path.replace("\\", "/")
             image_html = (
                 f'<div style="position: relative; display: inline-block;">'
-                f'    <a href="image://{image_path.replace("\\", "/")}" style="text-decoration: none;">'
+                f'    <a href="image://{normalized_path}" style="text-decoration: none;">'
                 f'        <img src="data:image/png;base64,{base64_image}" width="75"/>'
                 f'    </a>'
                 f'    <span style="position: absolute; top: 3px; right: 5px; color: {self.text_color}; font-size: 10px">'
