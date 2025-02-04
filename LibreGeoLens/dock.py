@@ -176,7 +176,7 @@ class LibreGeoLensDockWidget(QDockWidget):
 
         self.send_to_mllm_button = QPushButton("Send to MLLM")
         self.send_to_mllm_button.setStyleSheet("background-color: #4CAF50; color: white; padding: 10px;")
-        self.send_to_mllm_button.clicked.connect(self.send_to_mllm)
+        self.send_to_mllm_button.clicked.connect(self.send_to_mllm_fn)
         main_content_layout.addWidget(self.send_to_mllm_button)
 
         self.supported_api_clients = {
@@ -306,15 +306,13 @@ class LibreGeoLensDockWidget(QDockWidget):
                     self.tracked_layers_names.append(self.cogs_dict[layer.id()])
 
     def adjust_size_to_available_space(self):
-        """Adjust the docked widget size to fit within the QGIS interface."""
+        """ Adjust the docked widget size to fit within the QGIS interface. """
         # Get available geometry (excluding QGIS toolbars, status bars, etc.)
         available_geometry = QApplication.primaryScreen().availableGeometry()
-        dock_height = available_geometry.height() * 0.85
         dock_width = available_geometry.width() * 0.2
         # Set the size of the dock
-        self.setMaximumHeight(int(dock_height))
         self.setMinimumWidth(int(dock_width))
-        self.resize(int(dock_width), int(dock_height))
+        self.resize(int(dock_width), int(available_geometry.height()))
 
     def highlight_button(self, button):
         if self.current_highlighted_button:
@@ -844,6 +842,13 @@ class LibreGeoLensDockWidget(QDockWidget):
         else:
             image.save(image_path, "PNG")
         return image_path
+
+    def send_to_mllm_fn(self):
+        try:
+            self.send_to_mllm()
+        except Exception as e:
+            QMessageBox.warning(self.iface.mainWindow(), "Error", str(e))
+            self.load_chat(self.chat_list.item(self.chat_list.count() - 1))
 
     def send_to_mllm(self):
         selected_api = self.api_selection.currentText()
