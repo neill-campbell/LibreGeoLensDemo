@@ -487,18 +487,18 @@ class LibreGeoLensDockWidget(QDockWidget):
         settings.setValue("geojson_path", self.geojson_path)
 
     def load_geojson_from_demo(self):
-        demo_url = "https://libre-geo-lens.s3.us-east-1.amazonaws.com/demo/demo_imagery.geojson"
-        temp_geojson_path = os.path.join(tempfile.gettempdir(), "demo_imagery.geojson")
-        try:
-            response = requests.get(demo_url)
-            response.raise_for_status()
-            with open(temp_geojson_path, "wb") as file:
-                file.write(response.content)
-            self.geojson_path = temp_geojson_path
-            self.replace_geojson_layer()
-        except requests.RequestException as e:
-            QMessageBox.critical(self.iface.mainWindow(), "Error", f"Failed to download GeoJSON: {e}")
-            return
+        demo_geojson_path = os.path.join(self.logs_dir, "demo_imagery.geojson")
+        if not os.path.exists(demo_geojson_path):
+            try:
+                response = requests.get("https://libre-geo-lens.s3.us-east-1.amazonaws.com/demo/demo_imagery.geojson")
+                response.raise_for_status()
+                with open(demo_geojson_path, "wb") as file:
+                    file.write(response.content)
+            except requests.RequestException as e:
+                QMessageBox.critical(self.iface.mainWindow(), "Error", f"Failed to download GeoJSON: {e}")
+                return
+        self.geojson_path = demo_geojson_path
+        self.replace_geojson_layer()
 
     def load_geojson_from_local(self):
         self.geojson_path, _ = QFileDialog.getOpenFileName(
