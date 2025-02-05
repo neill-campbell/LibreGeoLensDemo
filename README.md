@@ -39,33 +39,6 @@ and add at least one of the following environment variables:
 
 Make sure to restart QGIS so that these changes take effect.
 
-### Python dependencies
-
-This plugin needs external Python dependencies listed in [requirements.txt](LibreGeoLens/requirements.txt).
-The plugin will try to install them automatically, but in case it fails, here's how you can do it manually:
-
-In Windows, you can use the OSGeo4W shell and run
-```shell
-python -m pip install -r requirements.txt
-```
-If this fails, try the instructions for below.
-
-In macOS/Linux or in Windows if the above failed, you need to find the Python that QGIS is using. In order to do so, open QGIS,
-open the Python Console <img src="resources/media/python_qgis_icon.png" width="20" height="20"> (Ctrl+Alt+P)
-and find the Python executable directory path with
-```python
-import sys
-sys.prefix  # example outputs: 'C:\\PROGRA~1\\QGIS33~1.13\\apps\\Python312' (Windows), /Applications/QGIS-LTR.app/Contents/MacOS (macOS)
-```
-and then in Windows Powershell run
-```
-C:\PROGRA~1\QGIS33~1.13\apps\Python312\python3.exe -m pip install -r "requirements.txt"
-```
-or in the terminal (macOS, Linux) run
-```
-/Applications/QGIS-LTR.app/Contents/MacOS/bin/python3 -m pip install -r requirements.txt
-```
-
 ### COG streaming (optional)
 
 Since you can use the plugin with your local imagery, this is optional. 
@@ -158,24 +131,29 @@ python create_image_outlines_geojson.py --s3_directories s3://bucket1/path/to/di
 ## Installation from source (for devs)
 
 1. Clone this repo and follow the prerequisites section above.
-2. Find your QGIS local plugins directory and symlink [LibreGeoLens](LibreGeoLens) (the inner directory). For example, in Windows
-   you can run Command Prompt as an Administrator and do:
+2. Run `pip install -t .\LibreGeoLens\libs -r .\requirements.txt` from main directory of this repo.
+3. Find your QGIS local plugins directory and symlink [LibreGeoLens](LibreGeoLens) (the inner directory).
+   NOTE: If it's your first time using a QGIS plugin, you'll need to create the `plugins` directory first (see below).
+
+In Windows, you can run Command Prompt as an Administrator and do:
 ```
 mklink /D "C:\Users\<UserName>\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\LibreGeoLens" "C:\local\path\to\LibreGeoLens\LibreGeoLens"
 ```
-   In macOS, you can do:
+In macOS, you can do:
 ```
 ln -s /absolute/local/path/to/LibreGeoLens/LibreGeoLens ~/Library/Application\ Support/QGIS/QGIS3/profiles/default/python/plugins/LibreGeoLens
 ```
-   In Linux, you can do:
+In Linux, you can do:
 ```
 ln -s /absolute/local/path/to/LibreGeoLens/LibreGeoLens ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/LibreGeoLens
 ```
 
-NOTE: If it's your first time using QGIS, you might need to create the `plugins` directory first.
-
-3. Open QGIS, go to Plugins -> Manage and Install Plugins -> Settings -> Show also experimental plugins -> Installed Plugins -> LibreGeoLens.
-4. Now this plugin should appear when you click on Plugins and also the icons should show up on the right.
+4. Open QGIS, go to Plugins -> Manage and Install Plugins -> Settings -> Show also experimental plugins -> Installed Plugins -> LibreGeoLens.
+5. Now this plugin should appear when you click on Plugins and also the icons should show up on the right.
    If the plugin still doesn't appear, close and re-open QGIS and try again.
-5. In order to reload the plugin after the code in this repo is modified, you can install and use the *Plugin Reloader* plugin.
-6. If you change the icons or use new resources, run `pyrcc5 -o resources.py resources.qrc`.
+6. In order to reload the plugin after the code in this repo is modified, you can install and use the *Plugin Reloader* plugin.
+7. If you change the icons or use new resources, run `pyrcc5 -o resources.py resources.qrc`.
+
+## Publishing
+
+TODO
