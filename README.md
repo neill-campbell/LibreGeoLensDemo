@@ -134,7 +134,8 @@ python create_image_outlines_geojson.py --s3_directories s3://bucket1/path/to/di
 ## Quickstart
 
 1. Make sure you have followed the instructions for the prerequisites above.
-2. Search for "LibreGeoLens" in Plugins -> Manage and Install Plugins... -> All, and click Install Plugin.
+2. Go to Plugins > Manage and Install Plugins... -> Settings -> Show also experimental plugins -> All ->
+   search for "LibreGeoLens", and click Install Plugin.
 3. Load a basemap layer. See [this](https://www.giscourse.com/quickmapservices-plugin-an-easy-way-to-add-basemaps-in-qgis/) for an example of one way to do it. Google Road is a nice one to start with.
 4. Click on the <img src="LibreGeoLens/resources/icons/icon.png" width="20" height="20"> icon on the top right to start 
    the plugin, which will be docked to your right.
@@ -186,7 +187,8 @@ In Linux, you can do:
 ln -s /absolute/local/path/to/LibreGeoLens/LibreGeoLens ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/LibreGeoLensDev
 ```
 
-3. Open QGIS, go to Plugins -> Manage and Install Plugins -> Settings -> Show also experimental plugins -> Installed Plugins -> LibreGeoLensDev.
+3. Open QGIS, go to Plugins -> Manage and Install Plugins... -> Settings -> Show also experimental plugins ->
+   Installed Plugins -> click on the checkbox for LibreGeoLensDev.
 4. Now this plugin should appear when you click on Plugins and also the icons should show up on the right.
    If the plugin still doesn't appear, close and re-open QGIS and try again.
 5. In order to reload the plugin after the code in this repo is modified, you can install and use the *Plugin Reloader* plugin.
