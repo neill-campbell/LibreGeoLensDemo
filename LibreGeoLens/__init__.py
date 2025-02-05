@@ -1,13 +1,41 @@
-import sys
-import os
-
-plugin_dir = os.path.dirname(__file__)
-libs_path = os.path.join(plugin_dir, "libs")
-
-if os.path.exists(libs_path) and libs_path not in sys.path:
-    sys.path.insert(0, libs_path)
+def install_pip_and_dependencies():
+    import os
+    import subprocess
+    from qgis.PyQt.QtCore import QStandardPaths
+    python = QStandardPaths.findExecutable("python")
+    try:
+        # Check if pip is installed
+        subprocess.run([python, "-m", "pip", "--version"], check=True)
+        print("pip is already installed.")
+    except subprocess.CalledProcessError:
+        print("pip is not installed. Installing pip...")
+        try:
+            subprocess.run([python, "-m", "ensurepip", "--default-pip"], check=True)
+            print("pip has been installed successfully.")
+        except subprocess.CalledProcessError:
+            print("ensurepip failed. Trying get-pip.py...")
+            try:
+                import urllib.request
+                url = "https://bootstrap.pypa.io/get-pip.py"
+                get_pip_path = "get-pip.py"
+                urllib.request.urlretrieve(url, get_pip_path)
+                subprocess.run([python, get_pip_path], check=True)
+                os.remove(get_pip_path)
+                print("pip installed successfully using get-pip.py")
+            except Exception as e:
+                print(f"Failed to install pip: {e}")
+    subprocess.check_call([python, "-m", "pip", "install", "-r",
+                           os.path.join(os.path.dirname(__file__), "requirements.txt")])
 
 
 def classFactory(iface):  # pylint: disable=invalid-name
-    from .libre_geo_lens import LibreGeoLens
+    try:
+        from .libre_geo_lens import LibreGeoLens
+    except ImportError:
+        try:
+            install_pip_and_dependencies()
+            from .libre_geo_lens import LibreGeoLens
+        except:
+            raise Exception("Failed to install python dependencies. Please install manually by following"
+                            " https://github.com/ampsight/LibreGeoLens?tab=readme-ov-file#python-dependencies")
     return LibreGeoLens(iface)
