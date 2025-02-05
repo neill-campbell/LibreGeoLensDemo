@@ -60,14 +60,23 @@ from qgis.PyQt.QtCore import QStandardPaths
 QStandardPaths.findExecutable("python")
 # example outputs:
 # C:/PROGRA~1/QGIS33~1.15/bin/python.exe (Windows)
-# /Applications/QGIS-LTR.app/Contents/MacOS/bin/python3  (macOS)
 # /usr/bin/python  (Linux)
 ```
 
 and then in Powershell or in the terminal, run
 ```shell
-<output_from_above> -m pip install -r "requirements.txt"
+<output_from_above> -m pip install -r requirements.txt
 ```
+
+It could happen that the output of `QStandardPaths.findExecutable("python")` is an empty string. If so, try the following:
+```python
+import sys
+sys.executable
+# example output:
+# /Applications/QGIS-LTR.app/Contents/MacOS/QGIS  (macOS)
+```
+
+and then try to find the Python you need to use. In the example above, it was `/Applications/QGIS-LTR.app/Contents/MacOS/bin/python3`.
 
 ### COG streaming (optional)
 
@@ -166,18 +175,18 @@ python create_image_outlines_geojson.py --s3_directories s3://bucket1/path/to/di
 
 In Windows, you can run Command Prompt as an Administrator and do:
 ```
-mklink /D "C:\Users\<UserName>\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\LibreGeoLens" "C:\local\path\to\LibreGeoLens\LibreGeoLens"
+mklink /D "C:\Users\<UserName>\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\LibreGeoLensDev" "C:\local\path\to\LibreGeoLens\LibreGeoLens"
 ```
 In macOS, you can do:
 ```
-ln -s /absolute/local/path/to/LibreGeoLens/LibreGeoLens ~/Library/Application\ Support/QGIS/QGIS3/profiles/default/python/plugins/LibreGeoLens
+ln -s /absolute/local/path/to/LibreGeoLens/LibreGeoLens ~/Library/Application\ Support/QGIS/QGIS3/profiles/default/python/plugins/LibreGeoLensDev
 ```
 In Linux, you can do:
 ```
-ln -s /absolute/local/path/to/LibreGeoLens/LibreGeoLens ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/LibreGeoLens
+ln -s /absolute/local/path/to/LibreGeoLens/LibreGeoLens ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/LibreGeoLensDev
 ```
 
-3. Open QGIS, go to Plugins -> Manage and Install Plugins -> Settings -> Show also experimental plugins -> Installed Plugins -> LibreGeoLens.
+3. Open QGIS, go to Plugins -> Manage and Install Plugins -> Settings -> Show also experimental plugins -> Installed Plugins -> LibreGeoLensDev.
 4. Now this plugin should appear when you click on Plugins and also the icons should show up on the right.
    If the plugin still doesn't appear, close and re-open QGIS and try again.
 5. In order to reload the plugin after the code in this repo is modified, you can install and use the *Plugin Reloader* plugin.

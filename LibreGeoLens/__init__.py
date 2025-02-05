@@ -3,6 +3,11 @@ def install_pip_and_dependencies():
     import subprocess
     from qgis.PyQt.QtCore import QStandardPaths
     python = QStandardPaths.findExecutable("python")
+    if not python:
+        import sys
+        python = sys.executable
+        if "MacOS" in python:
+            python = python.replace("MacOS/QGIS", "MacOS/bin/python3")
     try:
         # Check if pip is installed
         subprocess.run([python, "-m", "pip", "--version"], check=True)
@@ -34,8 +39,12 @@ def classFactory(iface):  # pylint: disable=invalid-name
     except ImportError:
         try:
             install_pip_and_dependencies()
-            from .libre_geo_lens import LibreGeoLens
         except:
-            raise Exception("Failed to install python dependencies. Please install manually by following"
+            raise Exception("Python dependencies failed to install. Please install them manually by following"
                             " https://github.com/ampsight/LibreGeoLens?tab=readme-ov-file#python-dependencies")
+        try:
+            from .libre_geo_lens import LibreGeoLens
+        except ImportError:
+            raise Exception("Please restart QGIS. If this error persists, please install the python dependencies"
+                            " manually by following https://github.com/ampsight/LibreGeoLens?tab=readme-ov-file#python-dependencies")
     return LibreGeoLens(iface)
