@@ -223,7 +223,10 @@ class LibreGeoLensDockWidget(QDockWidget):
             self.chat_history.setStyleSheet(chat_history_styles)
             self.image_display_widget.setStyleSheet(image_display_styles)
             if os.name == "posix":
-                QApplication.instance().setStyleSheet("""QInputDialog, QComboBox, QPushButton, QLabel {color: #D3D3D3;}""")
+                if "darwin" == os.uname().sysname.lower():  # macOS
+                    QApplication.instance().setStyleSheet("""QInputDialog, QComboBox, QPushButton, QLabel {color: #D3D3D3;}""")
+                else:  # Linux
+                    QApplication.instance().setStyleSheet("""QInputDialog, QComboBox, QPushButton, QLabel {color: #2b2b2b;}""")
         else:
             self.text_color = "black"
 
