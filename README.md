@@ -41,13 +41,14 @@ Make sure to restart QGIS so that these changes take effect.
 
 ### Python dependencies
 
-You also need to install the external Python dependencies listed in [requirements.txt](requirements.txt).
+This plugin needs external Python dependencies listed in [requirements.txt](LibreGeoLens/requirements.txt).
+The plugin will try to install them automatically, but in case it fails, here's how you can do it manually:
 
 In Windows, you can use the OSGeo4W shell and run
 ```shell
 python -m pip install -r requirements.txt
 ```
-If this fails, try the instructions for macOS/Linux below.
+If this fails, try the instructions for below.
 
 In macOS/Linux or in Windows if the above failed, you need to find the Python that QGIS is using. In order to do so, open QGIS,
 open the Python Console <img src="resources/media/python_qgis_icon.png" width="20" height="20"> (Ctrl+Alt+P)

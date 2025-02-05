@@ -2,7 +2,7 @@
 name=LibreGeoLens
 qgisMinimumVersion=3.30
 description=Experiment with MLLMs to analyze remote sensing imagery
-about=Chat with Multimodal Large Language Models (MLLMs) about the imagery you're seeing in QGIS. Stream Cloud Optimized GeoTIFFs (COGS), draw areas, and track interactions as GeoJSON features. This plugin has external dependencies. Please go through https://github.com/ampsight/LibreGeoLens?tab=readme-ov-file#Prerequisites before installing.
+about=Chat with Multimodal Large Language Models (MLLMs) about the imagery you're seeing in QGIS. Stream Cloud Optimized GeoTIFFs (COGS), draw areas, and track interactions as GeoJSON features. This plugin has some prerequisites. Please go through https://github.com/ampsight/LibreGeoLens?tab=readme-ov-file#Prerequisites.
 version=0.1
 author=Ampsight
 email=pedro.uria@ampsight.com
