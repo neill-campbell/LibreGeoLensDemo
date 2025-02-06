@@ -15,8 +15,8 @@ class LibreGeoLens:
         self.dock_widget = None
 
     def initGui(self):
-        self.add_action("Settings", ":/plugins/LibreGeoLens/resources/icons/settings_icon.png", self.open_settings)
-        self.add_action("Run", ":/plugins/LibreGeoLens/resources/icons/icon.png", self.run)
+        self.add_action("Settings", ":/plugins/libre_geo_lens/resources/icons/settings_icon.png", self.open_settings)
+        self.add_action("Run", ":/plugins/libre_geo_lens/resources/icons/icon.png", self.run)
 
     def add_action(self, name, icon_resource_str, fn_to_connect):
         action = QAction(QIcon(icon_resource_str), name, self.iface.mainWindow())

@@ -30,7 +30,7 @@ Make sure to restart QGIS so that these changes take effect.
 ### Python Dependencies
 
 The plugin also needs external Python dependencies. It will try to install them automatically, but if it fails, you will need to do so manually,
-by downloading [requirements.txt](LibreGeoLens/requirements.txt) and following the instructions below.
+by downloading [requirements.txt](libre_geo_lens/requirements.txt) and following the instructions below.
 
 NOTE: If while trying to install you get an error saying `pip not found` or similar, you will need to install pip first.
 
@@ -128,7 +128,7 @@ The script will find all the COGs nested inside `--s3_directories` and create th
 2. Go to `Plugins` > `Manage and Install Plugins...` -> `Settings` -> `Show also Experimental Plugins` -> `All` ->
    search for "LibreGeoLens", and click `Install Experimental Plugin`. Restart QGIS if needed.
 3. Load a basemap layer. See [this](https://www.giscourse.com/quickmapservices-plugin-an-easy-way-to-add-basemaps-in-qgis/) for an example of one way to do it. Google Road is a nice one to start with.
-4. Click on the <img src="LibreGeoLens/resources/icons/icon.png" width="20" height="20"> icon on the top right to start 
+4. Click on the <img src="libre_geo_lens/resources/icons/icon.png" width="20" height="20"> icon on the top right to start 
    the plugin, which will be docked to your right.
 5. Click on the `Load GeoJSON` button, choose `Use Demo Resources` and click `Ok`.
 6. You will see three red polygons over the US. Zoom into one of them, click on the `Draw Area to Stream COGs` button,
@@ -154,7 +154,7 @@ The script will find all the COGs nested inside `--s3_directories` and create th
 - You can stream your own data. See the [COG Streaming](#cog-streaming-optional) subsection
   above for more details. GeoJSONs can be loaded locally or from S3 with the `Load GeoJSON` button.
 - Note that every time you load a GeoJSON for streaming, all the layers related to the previous GeoJSON will be removed.
-- Additional optional settings  <img src="LibreGeoLens/resources/icons/settings_icon.png" width="20" height="20">:
+- Additional optional settings  <img src="libre_geo_lens/resources/icons/settings_icon.png" width="20" height="20">:
     - `Default GeoJSON S3 Directory`: the default directory in S3 where the `.geojson` files will be searched for.
        You can modify the actual directory to be used every time you click on the `Load GeoJSON` button.
     - `S3 Logs Directory`: the directory in S3 where you want to back up your logs.
@@ -165,23 +165,21 @@ The script will find all the COGs nested inside `--s3_directories` and create th
 ## Installation From Source (For Devs)
 
 1. Clone this repo and follow the [Prerequisites](#Prerequisites) section above.
-2. Find your QGIS local plugins directory and symlink [LibreGeoLens](LibreGeoLens) (the inner directory).
+2. Find your QGIS local plugins directory and symlink [libre_geo_lens](libre_geo_lens) (the inner directory).
    NOTE: If it's your first time using a QGIS plugin, you'll need to create the `plugins` directory first (see below).
 
 In Windows, you can run Command Prompt as an Administrator and do:
 ```
-mklink /D "C:\Users\<UserName>\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\LibreGeoLensDev" "C:\local\path\to\LibreGeoLens\LibreGeoLens"
+mklink /D "C:\Users\<UserName>\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\libre_geo_lens" "C:\local\path\to\LibreGeoLens\libre_geo_lens"
 ```
 In macOS, you can do:
 ```
-ln -s /absolute/local/path/to/LibreGeoLens/LibreGeoLens ~/Library/Application\ Support/QGIS/QGIS3/profiles/default/python/plugins/LibreGeoLensDev
+ln -s /absolute/local/path/to/LibreGeoLens/libre_geo_lens ~/Library/Application\ Support/QGIS/QGIS3/profiles/default/python/plugins/libre_geo_lens
 ```
 In Linux, you can do:
 ```
-ln -s /absolute/local/path/to/LibreGeoLens/LibreGeoLens ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/LibreGeoLensDev
+ln -s /absolute/local/path/to/LibreGeoLens/libre_geo_lens ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/libre_geo_lens
 ```
-
-Note we're using `LibreGeoLensDev` so that we don't interfere with the `LibreGeoLens` from the QGIS Plugin Repository.
 
 3. Open QGIS, go to `Plugins` -> `Manage and Install Plugins...` -> `Settings` -> `Show also Experimental Plugins` ->
    `Installed Plugins` -> click on the checkbox for `LibreGeoLensDev`.
@@ -192,4 +190,5 @@ Note we're using `LibreGeoLensDev` so that we don't interfere with the `LibreGeo
 
 ## Publishing
 
-See [here](https://plugins.qgis.org/publish/). Zip [LibreGeoLens](LibreGeoLens) (the inner directory) and upload it.
+See [here](https://plugins.qgis.org/publish/). Zip [libre_geo_lens](libre_geo_lens) (the inner directory),
+make sure to remove the __pycache__, and upload it.

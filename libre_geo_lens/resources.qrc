@@ -1,8 +1,8 @@
 <RCC>
-    <qresource prefix="/plugins/LibreGeoLens" >
+    <qresource prefix="/plugins/libre_geo_lens" >
         <file>resources/icons/icon.png</file>
     </qresource>
-    <qresource prefix="/plugins/LibreGeoLens" >
+    <qresource prefix="/plugins/libre_geo_lens" >
         <file>resources/icons/settings_icon.png</file>
     </qresource>
 </RCC>
