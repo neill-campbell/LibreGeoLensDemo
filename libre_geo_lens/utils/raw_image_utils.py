@@ -25,7 +25,7 @@ def find_topmost_cog_feature(drawn_rectangle):
             continue
 
         layer = node.layer()
-        if ".geojson" in layer.source():
+        if ".geojson" in layer.source() or "Polygon?crs=EPSG:4326&uid=" in layer.source():
             continue
 
         layer_crs = layer.crs()
