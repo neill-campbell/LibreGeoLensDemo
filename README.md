@@ -165,7 +165,8 @@ The script will find all the COGs nested inside `--s3_directories` and create th
 ## Installation From Source (For Devs)
 
 1. Clone this repo and follow the [Prerequisites](#Prerequisites) section above.
-2. Find your QGIS local plugins directory and symlink [libre_geo_lens](libre_geo_lens) (the inner directory).
+2. If you have already installed this plugin through the QGIS Python Plugins Repository, uninstall it first.
+3. Find your QGIS local plugins directory and symlink [libre_geo_lens](libre_geo_lens) (the inner directory).
    NOTE: If it's your first time using a QGIS plugin, you'll need to create the `plugins` directory first (see below).
 
 In Windows, you can run Command Prompt as an Administrator and do:
@@ -181,12 +182,12 @@ In Linux, you can do:
 ln -s /absolute/local/path/to/LibreGeoLens/libre_geo_lens ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/libre_geo_lens
 ```
 
-3. Open QGIS, go to `Plugins` -> `Manage and Install Plugins...` -> `Settings` -> `Show also Experimental Plugins` ->
+4. Open QGIS, go to `Plugins` -> `Manage and Install Plugins...` -> `Settings` -> `Show also Experimental Plugins` ->
    `Installed Plugins` -> click on the checkbox for `LibreGeoLensDev`.
-4. Now this plugin should appear when you click on Plugins and also the icons should show up on the right.
+5. Now this plugin should appear when you click on Plugins and also the icons should show up on the right.
    If the plugin still doesn't appear, close and re-open QGIS and try again.
-5. In order to reload the plugin after the code in this repo is modified, you can install and use the *Plugin Reloader* plugin.
-6. If you change the icons or use new resources, run `pyrcc5 -o resources.py resources.qrc`.
+6. In order to reload the plugin after the code in this repo is modified, you can install and use the *Plugin Reloader* plugin.
+7. If you change the icons or use new resources, run `pyrcc5 -o resources.py resources.qrc`.
 
 ## Publishing
 
