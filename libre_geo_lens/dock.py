@@ -102,6 +102,10 @@ class LibreGeoLensDockWidget(QDockWidget):
         self.start_new_chat_button.clicked.connect(self.start_new_chat)
         sidebar_layout.addWidget(self.start_new_chat_button)
 
+        self.delete_chat_button = QPushButton("Delete Chat")
+        self.delete_chat_button.clicked.connect(self.delete_chat)
+        sidebar_layout.addWidget(self.delete_chat_button)
+
         self.chat_list = QListWidget()
         self.chat_list.itemClicked.connect(self.load_chat)
         sidebar_layout.addWidget(self.chat_list)
@@ -374,7 +378,7 @@ class LibreGeoLensDockWidget(QDockWidget):
         chats = self.logs_db.fetch_all_chats()
         for chat in chats:
             chat_id, chat_summary = chat[0], chat[2]
-            item = QListWidgetItem(chat_summary if chat_summary else f"Chat {chat_id}")
+            item = QListWidgetItem(chat_summary if chat_summary else f"New chat")
             item.setData(Qt.UserRole, chat_id)
             self.chat_list.addItem(item)
 
@@ -835,6 +839,65 @@ class LibreGeoLensDockWidget(QDockWidget):
         self.model_selection.clear()
         self.model_selection.addItems(models)
 
+    def delete_chat(self):
+        """Delete the selected chat after confirmation"""
+        current_item = self.chat_list.currentItem()
+        if not current_item:
+            QMessageBox.warning(self, "Warning", "Please select a chat to delete.")
+            return
+
+        chat_id = current_item.data(Qt.UserRole)
+        reply = QMessageBox.question(
+            self,
+            "Confirm Delete",
+            "Are you sure you want to delete this chat? This cannot be undone.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            modified_logs = False
+            # Delete chat and get chips to remove from log layer
+            for image_path, chip_id in self.logs_db.delete_chat(chat_id):
+                # Remove the chip's feature from log layer
+                features_to_remove = []
+                for feature in self.log_layer.getFeatures():
+                    if str(feature["ChipId"]) == str(chip_id):
+                        features_to_remove.append(feature.id())
+                if features_to_remove:
+                    modified_logs = True
+                    self.log_layer.startEditing()
+                    self.log_layer.dataProvider().deleteFeatures(features_to_remove)
+                    self.log_layer.commitChanges()
+                # Delete the image files
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+                raw_path = image_path.replace("_screen.png", "_raw.png")
+                if os.path.exists(raw_path):
+                    os.remove(raw_path)
+
+            # Update UI
+            row = self.chat_list.row(current_item)
+            self.chat_list.takeItem(row)
+            self.chat_history.clear()
+            self.image_display_widget.clear_images()
+            self.current_chat_id = None
+            self.conversation = []
+
+            if modified_logs:
+                # If log layer is empty, remove from disk and create from scratch instead of saving changes
+                if self.log_layer.featureCount() == 0:
+                    os.remove(os.path.join(self.logs_dir, "logs.geojson"))
+                    self.handle_log_layer()
+                else:
+                    # Save changes to geojson
+                    self.save_logs_to_geojson()
+                    self.handle_log_layer()
+
+            # Start new chat if no chats left
+            if self.chat_list.count() == 0:
+                self.start_new_chat()
+
     def save_image_to_logs(self, image, chip_id, raw=False):
         image_dir = os.path.join(self.logs_dir, "chips")
         os.makedirs(image_dir, exist_ok=True)
@@ -893,15 +956,16 @@ class LibreGeoLensDockWidget(QDockWidget):
             if image_path is None:  # Even if send_raw, we still want to save the "screen" chip and use it for displaying
                 rectangle_geom = self.image_display_widget.images[idx]["rectangle_geom"]
                 polygon_coords = rectangle_geom.asPolygon()
-                chip_id = len(self.logs_db.fetch_all_chips()) + 1
-                chip_ids_sequence.append(chip_id)
-                image_path = self.save_image_to_logs(image_to_send, chip_id)
-                self.logs_db.save_chip(
-                    image_path=image_path,
+                chip_id = self.logs_db.save_chip(
+                    image_path="tmp_image_path.png",
                     geocoords=[[point.x(), point.y()] for point in polygon_coords[0]] +
                               [[polygon_coords[0][0].x(), polygon_coords[0][0].y()]]
                 )
+                chip_ids_sequence.append(chip_id)
+                image_path = self.save_image_to_logs(image_to_send, chip_id)
                 self.image_display_widget.images[idx]["image_path"] = image_path
+                # Update the chip's image path in database
+                self.logs_db.update_chip_image_path(chip_id, image_path)
             else:
                 chip_ids_sequence.append(int(ntpath.basename(image_path).split(".")[0].split("_screen")[0]))
 

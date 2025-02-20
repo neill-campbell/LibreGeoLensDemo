@@ -165,3 +165,70 @@ class LogsDB:
         )
         conn.commit()
         conn.close()
+
+    def update_chip_image_path(self, chip_id, image_path):
+        """Update the image path for a chip"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE Chips SET image_path = ? WHERE id = ?",
+            (image_path, chip_id)
+        )
+        conn.commit()
+        conn.close()
+
+
+    def delete_chat(self, chat_id):
+        """Delete a chat and its associated data"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # Get chat's interactions
+        cursor.execute("SELECT interactions_sequence FROM Chats WHERE id = ?", (chat_id,))
+        interactions_sequence = json.loads(cursor.fetchone()[0])
+
+        # Get chips associated with these interactions
+        chips_to_check = set()
+        for interaction_id in interactions_sequence:
+            cursor.execute("SELECT chips_sequence FROM Interactions WHERE id = ?", (interaction_id,))
+            chips_sequence = json.loads(cursor.fetchone()[0])
+            chips_to_check.update(chips_sequence)
+
+        # For each chip, check if it's used in other chats' interactions
+        chips_to_delete = set()
+        for chip_id in chips_to_check:
+            is_used = False
+            # Get all interactions from other chats
+            cursor.execute("SELECT interactions_sequence FROM Chats WHERE id != ?", (chat_id,))
+            other_chats_interactions = []
+            for chat in cursor.fetchall():
+                other_chats_interactions.extend(json.loads(chat[0]))
+
+            # Get chips from those interactions
+            for interaction_id in other_chats_interactions:
+                cursor.execute("SELECT chips_sequence FROM Interactions WHERE id = ?", (interaction_id,))
+                other_interaction = cursor.fetchone()
+                other_chips = json.loads(other_interaction[0])
+                if chip_id in other_chips:
+                    is_used = True
+                    break
+            if not is_used:
+                chips_to_delete.add(chip_id)
+                cursor.execute("SELECT image_path FROM Chips WHERE id = ?", (chip_id,))
+                image_path = cursor.fetchone()[0]
+                # Return image paths for deletion
+                yield image_path, chip_id
+
+        # Delete interactions
+        for interaction_id in interactions_sequence:
+            cursor.execute("DELETE FROM Interactions WHERE id = ?", (interaction_id,))
+
+        # Delete chips
+        for chip_id in chips_to_delete:
+            cursor.execute("DELETE FROM Chips WHERE id = ?", (chip_id,))
+
+        # Delete chat
+        cursor.execute("DELETE FROM Chats WHERE id = ?", (chat_id,))
+
+        conn.commit()
+        conn.close()
