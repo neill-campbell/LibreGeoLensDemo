@@ -346,30 +346,37 @@ class LibreGeoLensDockWidget(QDockWidget):
                 image_path = image_path.replace("/", "\\\\").replace("c\\", "C:\\")
             chip_id = ntpath.basename(image_path).split(".")[0].split("_screen")[0]
 
-            already_there = False
-            for image_data in self.image_display_widget.images:
-                if image_data["chip_id"] == chip_id:
-                    already_there = True
-                    break
-
-            if not already_there:
+            # Check if image is already in display widget (use dict comprehension for efficiency)
+            existing_images = {img["chip_id"]: idx for idx, img in enumerate(self.image_display_widget.images) 
+                               if "chip_id" in img and img["chip_id"] is not None}
+            
+            if chip_id not in existing_images:
+                # Add image to display widget
                 self.image_display_widget.add_image(image_path)
                 self.image_display_widget.images[-1]["chip_id"] = chip_id
-                chip = [chip for chip in self.logs_db.fetch_all_chips() if str(chip[0]) == chip_id][0]
-                geocoords = json.loads(chip[2])
-                longitudes = [coord[0] for coord in geocoords]
-                latitudes = [coord[1] for coord in geocoords]
-                min_x = min(longitudes)
-                max_x = max(longitudes)
-                min_y = min(latitudes)
-                max_y = max(latitudes)
-                rectangle = QgsRectangle(min_x, min_y, max_x, max_y)
-                self.image_display_widget.images[-1]["rectangle_geom"] = QgsGeometry.fromRect(rectangle)
+                
+                # Get chip geometry data using more efficient query
+                chip = self.logs_db.fetch_chip_by_id(chip_id)
+                if chip:
+                    geocoords = json.loads(chip[2])
+                    # Calculate bounds in one pass instead of multiple list comprehensions
+                    min_x = min_y = float('inf')
+                    max_x = max_y = float('-inf')
+                    for lon, lat in geocoords:
+                        min_x = min(min_x, lon)
+                        max_x = max(max_x, lon)
+                        min_y = min(min_y, lat)
+                        max_y = max(max_y, lat)
+                    
+                    rectangle = QgsRectangle(min_x, min_y, max_x, max_y)
+                    self.image_display_widget.images[-1]["rectangle_geom"] = QgsGeometry.fromRect(rectangle)
 
+            # Use more efficient feature lookup
             request = QgsFeatureRequest().setFilterExpression(f'"ChipId" = \'{chip_id}\'')
-            for feature in self.log_layer.getFeatures(request):
-                zoom_to_and_flash_feature(feature, self.canvas, self.log_layer)
-                break
+            first_feature = next(self.log_layer.getFeatures(request), None)
+            
+            if first_feature:
+                zoom_to_and_flash_feature(first_feature, self.canvas, self.log_layer)
             else:
                 QMessageBox.warning(None, "Feature Not Found", "No feature found for the clicked chip.")
 
@@ -397,7 +404,12 @@ class LibreGeoLensDockWidget(QDockWidget):
         self.conversation = []
         self.chat_history.clear()
 
+        # Get chat data
         interactions_sequence = json.loads(self.logs_db.fetch_chat_by_id(chat_id)[1])
+        
+        # Build full HTML content at once rather than appending incrementally
+        full_html = []
+        
         for interaction_id in interactions_sequence:
             _, prompt, response, chip_ids, mllm_service, mllm_model, chip_modes = self.logs_db.fetch_interaction_by_id(
                 interaction_id
@@ -409,54 +421,64 @@ class LibreGeoLensDockWidget(QDockWidget):
                 f'{markdown.markdown(f"**User:** {prompt}")}'
                 f'</div>'
             )
-            self.chat_history.append(user_html)
+            full_html.append(user_html)
 
             # Add the interaction to the conversation list
             self.conversation.append({"role": "user", "content": [{"type": "text", "text": prompt}]})
 
             # Process chips associated with this interaction
-            for chip_id, chip_mode in zip(json.loads(chip_ids), ast.literal_eval(chip_modes)):
+            chip_ids_list = json.loads(chip_ids)
+            chip_modes_list = ast.literal_eval(chip_modes)
+            
+            # Optimize image loading - only load visible thumbnails
+            for chip_id, chip_mode in zip(chip_ids_list, chip_modes_list):
                 image_path = self.logs_db.fetch_chip_by_id(chip_id)[1]
-                base64_image = self.load_image_base64(image_path)
-                if chip_mode == "raw":
-                    base64_sent_image = self.load_image_base64(image_path.replace("_screen.png", "_raw.png"))
-                else:
-                    base64_sent_image = base64_image
                 normalized_path = image_path.replace("\\", "/")
+                
+                # Use file path for src instead of base64 for thumbnail display
+                # This defers actual image loading until display time
                 image_html = (
                     f'<div style="position: relative; display: inline-block;">'
                     f'    <a href="image://{normalized_path}" style="text-decoration: none;">'
-                    f'        <img src="data:image/png;base64,{base64_image}" width="75"/>'
+                    f'        <img src="file:///{normalized_path}" width="75" loading="lazy"/>'
                     f'    </a>'
                     f'    <span style="position: absolute; top: 3px; right: 5px; color: {self.text_color}; font-size: 10px">'
                     f'        ({"Raw" if chip_mode == "raw" else "Screen"} Chip)'
                     f'    </span>'
                     f'</div>'
                 )
-                self.chat_history.append(image_html)
+                full_html.append(image_html)
+                
+                # For conversation history, we need to load base64 data for API calls
+                # But we'll do this only when sending to MLLM, not during chat display
+                if chip_mode == "raw":
+                    sent_image_path = image_path.replace("_screen.png", "_raw.png")
+                else:
+                    sent_image_path = image_path
+                    
+                # Store the image path but don't convert to base64 yet - will do when sending message
                 self.conversation[-1]["content"].append(
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_sent_image}"}}
+                    {"type": "local_image_path", "path": sent_image_path, "mode": chip_mode}
                 )
 
             # Add assistant response with unique interaction ID
             assistant_html = (
                 f'<div id="interaction-{interaction_id}-response">'
-                 f'{markdown.markdown(f"**{mllm_model} ({mllm_service}):** {response}")}'
+                f'{markdown.markdown(f"**{mllm_model} ({mllm_service}):** {response}")}'
                 f'</div>'
             )
-            self.chat_history.append(assistant_html)
+            full_html.append(assistant_html)
 
             # Add the assistant's response to the conversation list
             self.conversation.append({"role": "assistant", "content": response})
+            
+        # Set the complete HTML content once instead of multiple appends
+        self.chat_history.setHtml(''.join(full_html))
 
-    def load_image_base64(self, image_path):
-        image = Image.open(image_path)
-        image = QImage(
-            image.tobytes("raw", "RGBA"), image.width, image.height, QImage.Format_RGBA8888
-        )
-        image = self.save_image_to_buffer(image)
-        base64_image = base64.b64encode(image.read()).decode('utf-8')
-        return base64_image
+    @staticmethod
+    def load_image_base64(image_path):
+        with open(image_path, 'rb') as f:
+            return base64.b64encode(f.read()).decode('utf-8')
 
     @staticmethod
     def style_geojson_layer(geojson_layer, color=(255, 0, 0)):
@@ -933,27 +955,26 @@ class LibreGeoLensDockWidget(QDockWidget):
         if not prompt.strip():
             QMessageBox.warning(self, "Error", "Please enter a prompt.")
             return
-        user_html = (
-            f'<div>'
-            f'{markdown.markdown(f"**User:** {prompt}")}'
-            f'</div>'
-        )
-        self.chat_history.append(user_html)
+        
+        # First collect user message and prepare data structures
+        user_html = f'<div>{markdown.markdown(f"**User:** {prompt}")}</div>'
         self.prompt_input.clear()
-        self.conversation.append({"role": "user", "content": prompt})
-
+        self.conversation.append({"role": "user", "content": [{"type": "text", "text": prompt}]})
+        
+        # Instead of updating UI for each image, collect HTML for batch update
+        image_html_list = []
+        
         n_images = len(self.image_display_widget.images)
         chip_ids_sequence, chip_modes_sequence = [], []
         send_raw = self.radio_raw.isChecked()
-
-        images_data = []
+        
+        # Process all images first before updating UI
         for idx in range(n_images):
             image_path = self.image_display_widget.images[idx]["image_path"]
             image_to_send = self.image_display_widget.images[idx]["image"]
-            image_buffer = self.save_image_to_buffer(image_to_send)
-            base64_image = base64.b64encode(image_buffer.read()).decode('utf-8')
-
-            if image_path is None:  # Even if send_raw, we still want to save the "screen" chip and use it for displaying
+            
+            # For unsaved images
+            if image_path is None:
                 rectangle_geom = self.image_display_widget.images[idx]["rectangle_geom"]
                 polygon_coords = rectangle_geom.asPolygon()
                 chip_id = self.logs_db.save_chip(
@@ -964,14 +985,17 @@ class LibreGeoLensDockWidget(QDockWidget):
                 chip_ids_sequence.append(chip_id)
                 image_path = self.save_image_to_logs(image_to_send, chip_id)
                 self.image_display_widget.images[idx]["image_path"] = image_path
-                # Update the chip's image path in database
                 self.logs_db.update_chip_image_path(chip_id, image_path)
             else:
                 chip_ids_sequence.append(int(ntpath.basename(image_path).split(".")[0].split("_screen")[0]))
 
+            # Process raw chips if needed
             if send_raw:
                 chip_modes_sequence.append("raw")
-                if not os.path.exists(image_path.replace("_screen.png", "_raw.png")):
+                raw_image_path = image_path.replace("_screen.png", "_raw.png")
+                
+                if not os.path.exists(raw_image_path):
+                    # Raw image doesn't exist yet - need to extract it
                     rectangle = self.image_display_widget.images[idx]["rectangle_geom"].boundingBox()
                     cog_path = ru.find_topmost_cog_feature(rectangle)
                     if cog_path is None:
@@ -984,16 +1008,13 @@ class LibreGeoLensDockWidget(QDockWidget):
                         self.chat_list.setCurrentItem(item)
                         self.load_chat(item)
                         return
-                    drawn_box_geocoords = ru.get_drawn_box_geocoordinates(
-                        rectangle,
-                        cog_path
-                    )
-                    # Determine chip size based on the bounding box of the drawn area and the raster resolution
+                        
+                    # Extract and save raw chip
+                    drawn_box_geocoords = ru.get_drawn_box_geocoordinates(rectangle, cog_path)
                     chip_width, chip_height = ru.determine_chip_size(drawn_box_geocoords, cog_path)
-                    # Compute center of that bounding box in lat/lon
                     center_latitude = (drawn_box_geocoords.yMinimum() + drawn_box_geocoords.yMaximum()) / 2
                     center_longitude = (drawn_box_geocoords.xMinimum() + drawn_box_geocoords.xMaximum()) / 2
-                    # Extract chip using center and computed width and height
+                    
                     image_to_send = ru.extract_chip_from_tif_point_in_memory(
                         img_path=cog_path,
                         center_latitude=center_latitude,
@@ -1002,55 +1023,107 @@ class LibreGeoLensDockWidget(QDockWidget):
                         chip_height_px=chip_height
                     )
                     self.save_image_to_logs(image_to_send, chip_ids_sequence[-1], raw=True)
-                else:
-                    pil_img = Image.open(image_path.replace("_screen.png", "_raw.png"))
-                    data = pil_img.tobytes("raw", "RGBA")
-                    image_to_send = QImage(data, pil_img.width, pil_img.height, QImage.Format_RGBA8888)
-                image_buffer = self.save_image_to_buffer(image_to_send)
-                base64_send_image = base64.b64encode(image_buffer.read()).decode('utf-8')
+                
+                self.conversation[-1]["content"].append(
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{self.load_image_base64(raw_image_path)}"}}
+                )
             else:
                 chip_modes_sequence.append("screen")
-                base64_send_image = base64_image
-
-            images_data.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_send_image}"}})
+                self.conversation[-1]["content"].append(
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{self.load_image_base64(image_path)}"}}
+                )
+            
+            # Create image thumbnail HTML - use file:// URL instead of base64 to reduce HTML size
             normalized_path = image_path.replace("\\", "/")
             image_html = (
                 f'<div style="position: relative; display: inline-block;">'
                 f'    <a href="image://{normalized_path}" style="text-decoration: none;">'
-                f'        <img src="data:image/png;base64,{base64_image}" width="75"/>'
+                f'        <img src="file:///{normalized_path}" width="75" loading="lazy"/>'
                 f'    </a>'
                 f'    <span style="position: absolute; top: 3px; right: 5px; color: {self.text_color}; font-size: 10px">'
                 f'        ({"Raw" if send_raw else "Screen"} Chip)'
                 f'    </span>'
                 f'</div>'
             )
-            self.chat_history.append(image_html)
-        if n_images > 0:
-            self.conversation[-1]["content"] = [{"type": "text", "text": prompt}] + images_data
-
+            image_html_list.append(image_html)
+        
+        # Update UI with all content at once
+        current_html = self.chat_history.toHtml()
+        # Append user message and all images
+        all_content_html = current_html + user_html + ''.join(image_html_list)
+        self.chat_history.setHtml(all_content_html)
         self.chat_history.verticalScrollBar().setValue(self.chat_history.verticalScrollBar().maximum())
         QApplication.processEvents()
 
         # Stream the response dynamically
         accumulated_text = f"<b>{selected_model} ({selected_api}):</b> "
         full_html = self.chat_history.toHtml()
+
+        # Use an efficient buffer for accumulating large responses
+        response_buffer = []
+
+        # Process the conversation to convert any local image paths to base64
+        processed_conversation = []
+        for message in self.conversation:
+            processed_message = {"role": message["role"]}
+            
+            if message["role"] == "assistant":
+                processed_message["content"] = message["content"]
+                processed_conversation.append(processed_message)
+                continue
+                
+            processed_content = []
+            for content in message["content"]:
+                if content.get("type") == "local_image_path":
+                    # Convert local image paths to base64
+                    image_path = content["path"]
+                    if os.path.exists(image_path):
+                        processed_content.append({
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{self.load_image_base64(image_path)}"}
+                        })
+                else:
+                    processed_content.append(content)
+            
+            processed_message["content"] = processed_content
+            processed_conversation.append(processed_message)
+            
+        # Start API call with processed conversation data
         response_stream = client.chat.completions.create(
             model=selected_model,
-            messages=self.conversation,
+            messages=processed_conversation,
             stream=True
         )
-        response = ""
+
+        # Process the stream with fewer UI updates
+        update_counter = 0
+        update_frequency = 2  # Update UI every N chunks to reduce UI redraws
+
         for chunk in response_stream:
             content = chunk.choices[0].delta.content
             if content is None:
                 continue
-            response += content
-            accumulated_text += content
-            rendered_markdown = markdown.markdown(accumulated_text)
-            updated_html = full_html + rendered_markdown
-            self.chat_history.setHtml(updated_html)
-            self.chat_history.verticalScrollBar().setValue(self.chat_history.verticalScrollBar().maximum())
-            QApplication.processEvents()
+
+            response_buffer.append(content)
+            update_counter += 1
+
+            # Only update UI periodically to improve performance
+            if update_counter >= update_frequency:
+                accumulated_text += ''.join(response_buffer)
+                rendered_markdown = markdown.markdown(accumulated_text)
+                updated_html = full_html + rendered_markdown
+                self.chat_history.setHtml(updated_html)
+                self.chat_history.verticalScrollBar().setValue(self.chat_history.verticalScrollBar().maximum())
+                QApplication.processEvents()
+                response_buffer = []
+                update_counter = 0
+
+        # Final update with any remaining content
+        if response_buffer:
+            accumulated_text += ''.join(response_buffer)
+
+        # Complete response
+        response = accumulated_text.replace(f"<b>{selected_model} ({selected_api}):</b> ", "")
         full_html += markdown.markdown(accumulated_text)
         self.chat_history.setHtml(full_html)
 
@@ -1107,4 +1180,8 @@ class LibreGeoLensDockWidget(QDockWidget):
         settings_dialog = SettingsDialog(self.iface.mainWindow())
         settings_dialog.sync_local_logs_dir_with_s3(self.logs_dir)
 
+        # Reload chat to offload in-memory imagery in self.conversation
+        item = self.chat_list.currentItem()
+        self.chat_list.setCurrentItem(item)
+        self.load_chat(item)
         self.chat_history.verticalScrollBar().setValue(self.chat_history.verticalScrollBar().maximum())

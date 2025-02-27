@@ -8,6 +8,11 @@ class LogsDB:
 
     def initialize_database(self):
         conn = sqlite3.connect(self.db_path)
+        # Enable WAL mode for better performance with concurrent reads/writes
+        conn.execute("PRAGMA journal_mode=WAL")
+        # Ensure synchronous mode is set for best performance while maintaining integrity
+        conn.execute("PRAGMA synchronous=NORMAL")
+        
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -37,6 +42,11 @@ class LogsDB:
                 summary TEXT NOT NULL
             )
         """)
+        
+        # Create indexes to speed up common queries
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_chip_id ON Chips(id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_chat_id ON Chats(id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_interaction_id ON Interactions(id)")
 
         conn.commit()
         conn.close()
@@ -103,6 +113,8 @@ class LogsDB:
 
     def fetch_all_interactions(self):
         conn = sqlite3.connect(self.db_path)
+        # Enable WAL mode for better performance with concurrent reads/writes
+        conn.execute("PRAGMA journal_mode=WAL")
         cursor = conn.cursor()
 
         cursor.execute("SELECT * FROM Interactions")
