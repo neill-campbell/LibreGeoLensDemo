@@ -13,7 +13,7 @@ about=LibreGeoLens is an experimental QGIS plugin that integrates Multimodal Lar
  See a demo here: https://github.com/ampsight/LibreGeoLens/blob/main/resources/media/demo.gif
 
  This plugin has some prerequisites. Please go through https://github.com/ampsight/LibreGeoLens?tab=readme-ov-file#Prerequisites. After you install it, you might get an error about external Python dependencies. Try restarting QGIS and if that does not solve the issue, you'll need to install them manually by following https://github.com/ampsight/LibreGeoLens?tab=readme-ov-file#python-dependencies.
-version=0.3
+version=0.4
 author=Ampsight
 email=pedro.uria@ampsight.com
 
@@ -26,6 +26,15 @@ tracker=https://github.com/ampsight/LibreGeoLens/issues
 repository=https://github.com/ampsight/LibreGeoLens
 
 changelog=
+      0.4
+        * Added optimizations around how chips are handled in the chats, how they are sent to the MLLM service, as well as database indexes.
+        * Added option to export chats to self-contained htmls, including the chips and a `.geojson` subset of the chips' features.
+        * Added option to open the local logs directory.
+        * Added a lot of help / info buttons and tooltips, including clarifications about screen vs raw chips and MLLM services resolution limits.
+        * Now showing original and downsampled resolution next to each chip in the chat.
+        * Added warning when trying to extract large raw chips.
+        * Improved chat list with keyboard navigation and better spacing.
+        * Fixed chat deletion bug and added logic to still have the option to keep and use features/chips that only belong to the deleted chat.
       0.3
         * Added option to delete chats.
       0.2

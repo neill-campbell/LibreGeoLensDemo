@@ -154,6 +154,10 @@ The script will find all the COGs nested inside `--s3_directories` and create th
 - You can stream your own data. See the [COG Streaming](#cog-streaming-optional) subsection
   above for more details. GeoJSONs can be loaded locally or from S3 with the `Load GeoJSON` button.
 - Note that every time you load a GeoJSON for streaming, all the layers related to the previous GeoJSON will be removed.
+- Click on `Delete Chat` to delete the selected chat. It will ask if you want to also delete features/chips if only associated with this chat.
+- Click on `Export Chat` to generate a self-contained html displaying the chat, including the chips used and a `.geojson` subset with the chip features.
+- Click on `Open Logs Directory` to open the directory where the local logs are saved.
+- Click on `Help` for a quick usage guide.
 - Additional optional settings  <img src="libre_geo_lens/resources/icons/settings_icon.png" width="20" height="20">:
     - `Default GeoJSON S3 Directory`: the default directory in S3 where the `.geojson` files will be searched for.
        You can modify the actual directory to be used every time you click on the `Load GeoJSON` button.
