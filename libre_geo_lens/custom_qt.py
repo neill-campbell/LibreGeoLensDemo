@@ -359,6 +359,11 @@ class IdentifyDrawnAreaTool(QgsMapToolEmitPoint):
         selected_chat, _ = self.prompt_selection(
             "chat", chats, lambda chat_summary: chat_summary, lambda x: x
         )
+        if not selected_chat:  # Features / chips that belonged to chat/s which have been deleted
+            feature = features[selected_index]
+            chip_path = feature.attributes()[1]
+            self.parent_dialog.handle_anchor_click("image://" + chip_path)
+            return
 
         selected_interaction_key, _ = self.prompt_selection(
             "interaction",

@@ -14,30 +14,38 @@ class SettingsDialog(QDialog):
 
         # GeoJSON S3 Directory Setting
         self.s3_directory_label = QLabel("Default GeoJSON S3 Directory:")
+        self.s3_directory_label.setToolTip("The default S3 directory where GeoJSON files containing image outlines are stored")
         self.s3_directory_input = QLineEdit()
+        self.s3_directory_input.setToolTip("Example: s3://bucket-name/path/to/geojsons/")
         self.layout.addWidget(self.s3_directory_label)
         self.layout.addWidget(self.s3_directory_input)
 
         # S3 Logs Directory Setting
         self.s3_logs_directory_label = QLabel("S3 Logs Directory:")
+        self.s3_logs_directory_label.setToolTip("Optional: S3 directory where logs and chips will be backed up automatically")
         self.s3_logs_directory_input = QLineEdit()
+        self.s3_logs_directory_input.setToolTip("Example: s3://bucket-name/logs/ (leave empty to disable S3 backup)")
         self.layout.addWidget(self.s3_logs_directory_label)
         self.layout.addWidget(self.s3_logs_directory_input)
 
         # Local Logs Directory Setting
         self.local_logs_directory_label = QLabel("Local Logs Directory:")
+        self.local_logs_directory_label.setToolTip("Local directory where logs and image chips will be saved")
         self.local_logs_directory_input = QLineEdit()
+        self.local_logs_directory_input.setToolTip("Default: ~/LibreGeoLensLogs if left empty")
         self.layout.addWidget(self.local_logs_directory_label)
         self.layout.addWidget(self.local_logs_directory_input)
 
         # Browse Button
         self.browse_button = QPushButton("Browse")
         self.browse_button.clicked.connect(self.browse_logs_directory)
+        self.browse_button.setToolTip("Select a folder on your computer for storing logs and chips")
         self.layout.addWidget(self.browse_button)
 
         # Save button
         self.save_button = QPushButton("Save")
         self.save_button.clicked.connect(self.save_settings)
+        self.save_button.setToolTip("Save these settings for future sessions")
         self.layout.addWidget(self.save_button)
 
         self.load_settings()

@@ -1,8 +1,13 @@
 import os
+import math
 import json
 import io
 import base64
 import uuid
+import subprocess
+import platform
+import shutil
+import datetime
 from openai import OpenAI
 from groq import Groq
 import boto3
@@ -100,38 +105,41 @@ class LibreGeoLensDockWidget(QDockWidget):
 
         self.start_new_chat_button = QPushButton("Start New Chat")
         self.start_new_chat_button.clicked.connect(self.start_new_chat)
+        self.start_new_chat_button.setToolTip("Create a new conversation with the MLLM")
         sidebar_layout.addWidget(self.start_new_chat_button)
 
         self.delete_chat_button = QPushButton("Delete Chat")
         self.delete_chat_button.clicked.connect(self.delete_chat)
+        self.delete_chat_button.setToolTip("Delete the currently selected chat conversation")
         sidebar_layout.addWidget(self.delete_chat_button)
+        
+        self.export_chat_button = QPushButton("Export Chat")
+        self.export_chat_button.clicked.connect(self.export_chat)
+        self.export_chat_button.setToolTip("Export the current chat as a self-contained HTML file with images")
+        sidebar_layout.addWidget(self.export_chat_button)
+        
+        self.open_logs_dir_button = QPushButton("Open Logs Directory")
+        self.open_logs_dir_button.clicked.connect(lambda x: self.open_directory(self.logs_dir))
+        self.open_logs_dir_button.setToolTip("Open the folder where chat logs and image chips are stored")
+        sidebar_layout.addWidget(self.open_logs_dir_button)
 
         self.chat_list = QListWidget()
         self.chat_list.itemClicked.connect(self.load_chat)
+        self.chat_list.currentItemChanged.connect(self.on_current_item_changed)
+        # self.chat_list.setToolTip("List of saved chat conversations - click to load a chat")
+        # Add spacing between items
+        self.chat_list.setSpacing(3)
         sidebar_layout.addWidget(self.chat_list)
 
         buttons_layout = QVBoxLayout()
-
-        button_1_layout = QHBoxLayout()
-        buttons_layout.addLayout(button_1_layout)
-        self.load_geojson_button = QPushButton("Load GeoJSON")
-        self.load_geojson_button.clicked.connect(self.load_geojson)
-        self.load_geojson_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        button_1_layout.addWidget(self.load_geojson_button)
-
-        button_2_layout = QHBoxLayout()
-        buttons_layout.addLayout(button_2_layout)
-        self.get_cogs_button = QPushButton("Draw Area to Stream COGs")
-        self.get_cogs_button.clicked.connect(lambda: self.highlight_button(self.get_cogs_button))
-        self.get_cogs_button.clicked.connect(lambda: self.activate_area_drawing_tool(capture_image=False))
-        self.get_cogs_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        button_2_layout.addWidget(self.get_cogs_button)
 
         button_3_layout = QHBoxLayout()
         buttons_layout.addLayout(button_3_layout)
         self.draw_area_button = QPushButton("Draw Area to Chip Imagery")
         self.draw_area_button.clicked.connect(lambda: self.highlight_button(self.draw_area_button))
         self.draw_area_button.clicked.connect(lambda: self.activate_area_drawing_tool(capture_image=True))
+        self.draw_area_button.setToolTip(
+            "Click to activate tool, then draw a rectangle on the map to extract a chip of that area")
         self.draw_area_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         button_3_layout.addWidget(self.draw_area_button)
 
@@ -140,8 +148,37 @@ class LibreGeoLensDockWidget(QDockWidget):
         self.select_area_button = QPushButton("Select Area")
         self.select_area_button.clicked.connect(lambda: self.highlight_button(self.select_area_button))
         self.select_area_button.clicked.connect(self.activate_identify_drawn_area_tool)
+        self.select_area_button.setToolTip(
+            "Click to activate tool, then click on an orange chip outline to see it in the chat")
         self.select_area_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         button_4_layout.addWidget(self.select_area_button)
+
+        button_1_layout = QHBoxLayout()
+        buttons_layout.addLayout(button_1_layout)
+        self.load_geojson_button = QPushButton("Load GeoJSON")
+        self.load_geojson_button.clicked.connect(self.load_geojson)
+        self.load_geojson_button.setToolTip("Load GeoJSON file containing image outlines to browse and stream imagery")
+        self.load_geojson_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        button_1_layout.addWidget(self.load_geojson_button)
+
+        button_2_layout = QHBoxLayout()
+        buttons_layout.addLayout(button_2_layout)
+        self.get_cogs_button = QPushButton("Draw Area to Stream COGs")
+        self.get_cogs_button.clicked.connect(lambda: self.highlight_button(self.get_cogs_button))
+        self.get_cogs_button.clicked.connect(lambda: self.activate_area_drawing_tool(capture_image=False))
+        self.get_cogs_button.setToolTip(
+            "Click to activate tool, then draw a rectangle on the map to load imagery within that area")
+        self.get_cogs_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        button_2_layout.addWidget(self.get_cogs_button)
+
+        # Help button
+        help_button_layout = QHBoxLayout()
+        buttons_layout.addLayout(help_button_layout)
+        self.help_button = QPushButton("Help")
+        self.help_button.clicked.connect(self.show_quick_help)
+        # help_button.setToolTip("Show LibreGeoLens quick guide")
+        self.help_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        help_button_layout.addWidget(self.help_button)
 
         sidebar_layout.addLayout(buttons_layout)
 
@@ -160,32 +197,60 @@ class LibreGeoLensDockWidget(QDockWidget):
         self.chat_history.setReadOnly(True)
         self.chat_history.setWordWrapMode(QTextOption.WordWrap)  # Enable text wrapping
         self.chat_history.setStyleSheet("background-color: #f5f5f5; border: 1px solid #ddd;")
+        # self.chat_history.setToolTip("Chat history - click on image chips to highlight their location on the map")
         main_content_layout.addWidget(self.chat_history, stretch=8)
 
         self.prompt_input = QTextEdit()
         self.prompt_input.setPlaceholderText("Type your prompt here...")
         self.prompt_input.setMinimumHeight(50)
+        # self.prompt_input.setToolTip("Enter your question about the imagery here")
         main_content_layout.addWidget(self.prompt_input, stretch=1)
 
         self.radio_chip = QRadioButton("Send Screen Chip")
+        self.radio_chip.setToolTip("Send a screenshot of what you see in QGIS (includes styling, labels, etc.)")
         self.radio_raw = QRadioButton("Send Raw Chip")
+        self.radio_raw.setToolTip("Send the raw imagery data (no styling or overlays, extracting can be resource intensive)")
         self.radio_chip.setChecked(True)
+        self.info_button = QPushButton("i")
+        self.info_button.setFixedSize(20, 20)
+        self.info_button.setToolTip("Click for information about chip types and image limits")
+        self.info_button.clicked.connect(self.show_chip_info)
+        
         radio_group_layout = QHBoxLayout()
         radio_group_layout.addWidget(self.radio_chip)
         radio_group_layout.addWidget(self.radio_raw)
+        radio_group_layout.addWidget(self.info_button)
+        radio_group_layout.addStretch()
         main_content_layout.addLayout(radio_group_layout)
 
         self.image_display_widget = ImageDisplayWidget(canvas=self.canvas, log_layer=self.log_layer)
+        self.image_display_widget.setToolTip("Image chips to send - click to highlight on map, double-click to open full-size")
         main_content_layout.addWidget(self.image_display_widget, stretch=2)
 
         self.send_to_mllm_button = QPushButton("Send to MLLM")
         self.send_to_mllm_button.setStyleSheet("background-color: #4CAF50; color: white; padding: 10px;")
         self.send_to_mllm_button.clicked.connect(self.send_to_mllm_fn)
+        self.send_to_mllm_button.setToolTip("Send your prompt and selected image chips to the Multimodal Large Language Model")
         main_content_layout.addWidget(self.send_to_mllm_button)
 
         self.supported_api_clients = {
-            "OpenAI": {"class": OpenAI, "models": ["gpt-4o-2024-08-06", "gpt-4o-mini-2024-07-18"]},
-            "Groq": {"class": Groq, "models": ["llama-3.2-90b-vision-preview", "llama-3.2-11b-vision-preview"]}
+            "OpenAI": {
+                "class": OpenAI,
+                "models": ["gpt-4o-2024-08-06", "gpt-4o-mini-2024-07-18"],
+                "limits": {
+                    "image_px": {
+                        "longest_side": 2048,
+                        "shortest_side": 768
+                    }
+                }
+            },
+            "Groq": {
+                "class": Groq,
+                "models": ["llama-3.2-90b-vision-preview", "llama-3.2-11b-vision-preview"],
+                "limits": {
+                    "image_mb": 4
+                }
+            }
         }
         api_model_layout = QVBoxLayout()
 
@@ -195,11 +260,13 @@ class LibreGeoLensDockWidget(QDockWidget):
         self.api_selection = QComboBox()
         self.api_selection.addItems(list(self.supported_api_clients))
         self.api_selection.currentIndexChanged.connect(self.update_model_choices)
+        self.api_selection.setToolTip("Select the MLLM service provider (requires API key in QGIS settings)")
         api_model_layout.addWidget(self.api_selection)
 
         self.model_label = QLabel("MLLM Model:")
         api_model_layout.addWidget(self.model_label)
         self.model_selection = QComboBox()
+        self.model_selection.setToolTip("Select the specific multimodal model to use for analysis")
         api_model_layout.addWidget(self.model_selection)
 
         self.update_model_choices()
@@ -251,6 +318,10 @@ class LibreGeoLensDockWidget(QDockWidget):
 
         item = self.chat_list.item(self.chat_list.count() - 1)
         if item is None:
+            # If there are no chats, this is likely the first time the plugin is used
+            # Show the quick help and then start a new chat
+            QApplication.processEvents()  # Ensure UI is fully loaded
+            self.show_quick_help()
             self.start_new_chat()
         else:
             self.chat_list.setCurrentItem(item)
@@ -339,7 +410,7 @@ class LibreGeoLensDockWidget(QDockWidget):
         self.image_display_widget.log_layer = self.log_layer
 
     def handle_anchor_click(self, url):
-        url_str = url.toString()
+        url_str = url.toString() if type(url) != str else url
         if url_str.startswith("image://"):
             image_path = urllib.parse.unquote(url_str.replace("image://", "", 1))
             if os.name == "nt":
@@ -398,6 +469,11 @@ class LibreGeoLensDockWidget(QDockWidget):
         self.chat_list.setCurrentItem(new_chat)
         self.load_chat(new_chat)
 
+    def on_current_item_changed(self, current, previous):
+        """Handle when user navigates with arrow keys"""
+        if current:
+            self.load_chat(current)
+            
     def load_chat(self, item):
         chat_id = item.data(Qt.UserRole)
         self.current_chat_id = chat_id
@@ -411,7 +487,8 @@ class LibreGeoLensDockWidget(QDockWidget):
         full_html = []
         
         for interaction_id in interactions_sequence:
-            _, prompt, response, chip_ids, mllm_service, mllm_model, chip_modes = self.logs_db.fetch_interaction_by_id(
+            (_, prompt, response, chip_ids, mllm_service, mllm_model, chip_modes,
+             original_resolutions, actual_resolutions) = self.logs_db.fetch_interaction_by_id(
                 interaction_id
             )
 
@@ -429,11 +506,42 @@ class LibreGeoLensDockWidget(QDockWidget):
             # Process chips associated with this interaction
             chip_ids_list = json.loads(chip_ids)
             chip_modes_list = ast.literal_eval(chip_modes)
+            try:
+                original_resolutions_list = ast.literal_eval(original_resolutions) if original_resolutions else []
+                actual_resolutions_list = ast.literal_eval(actual_resolutions) if actual_resolutions else []
+            except (TypeError, json.JSONDecodeError):
+                # Handle case where columns might be NULL or invalid in older database entries
+                original_resolutions_list = []
+                actual_resolutions_list = []
+            
+            # Ensure lists exist and have correct length (for backward compatibility)
+            if not original_resolutions_list:
+                original_resolutions_list = ["Unknown"] * len(chip_ids_list)
+            if not actual_resolutions_list:
+                actual_resolutions_list = ["Unknown"] * len(chip_ids_list)
             
             # Optimize image loading - only load visible thumbnails
-            for chip_id, chip_mode in zip(chip_ids_list, chip_modes_list):
+            for i, (chip_id, chip_mode) in enumerate(zip(chip_ids_list, chip_modes_list)):
                 image_path = self.logs_db.fetch_chip_by_id(chip_id)[1]
                 normalized_path = image_path.replace("\\", "/")
+                
+                # Get resolution information
+                original_res = original_resolutions_list[i] if i < len(original_resolutions_list) else "Unknown"
+                actual_res = actual_resolutions_list[i] if i < len(actual_resolutions_list) else "Unknown"
+                
+                # Create resolution display text
+                resolution_html = ""
+                if original_res != "Unknown":
+                    if original_res != actual_res:
+                        resolution_html = (
+                            f'<span style="position: absolute; bottom: 3px; left: 5px; color: {self.text_color}; '
+                            f'font-size: 10px">{original_res} → {actual_res}</span>'
+                        )
+                    else:
+                        resolution_html = (
+                            f'<span style="position: absolute; bottom: 3px; left: 5px; color: {self.text_color}; '
+                            f'font-size: 10px">{original_res}</span>'
+                        )
                 
                 # Use file path for src instead of base64 for thumbnail display
                 # This defers actual image loading until display time
@@ -445,6 +553,7 @@ class LibreGeoLensDockWidget(QDockWidget):
                     f'    <span style="position: absolute; top: 3px; right: 5px; color: {self.text_color}; font-size: 10px">'
                     f'        ({"Raw" if chip_mode == "raw" else "Screen"} Chip)'
                     f'    </span>'
+                    f'{resolution_html}'
                     f'</div>'
                 )
                 full_html.append(image_html)
@@ -475,10 +584,77 @@ class LibreGeoLensDockWidget(QDockWidget):
         # Set the complete HTML content once instead of multiple appends
         self.chat_history.setHtml(''.join(full_html))
 
-    @staticmethod
-    def load_image_base64(image_path):
-        with open(image_path, 'rb') as f:
-            return base64.b64encode(f.read()).decode('utf-8')
+    def load_image_base64_downscale_if_needed(self, image_path, api):
+        image = Image.open(image_path)
+        orig_width, orig_height = image.size
+        final_width, final_height = orig_width, orig_height  # Default to original size
+        was_resized = False
+
+        api_config = self.supported_api_clients.get(api, {})
+        limits = api_config.get("limits", {})
+
+        # Process pixel-based limits
+        if "image_px" in limits:
+            px_limits = limits["image_px"]
+            longest_side_limit = px_limits.get("longest_side")
+            shortest_side_limit = px_limits.get("shortest_side")
+
+            longest = max(orig_width, orig_height)
+            shortest = min(orig_width, orig_height)
+
+            # Check if image already meets both constraints.
+            if longest > longest_side_limit or shortest > shortest_side_limit:
+                # Compute scale factors for each constraint.
+                factor_longest = longest_side_limit / longest  # to keep the longest side within limit
+                factor_shortest = shortest_side_limit / shortest  # to keep the shortest side within limit
+
+                # Choose the smallest factor; also do not upscale (max factor = 1).
+                scale_factor = min(1, factor_longest, factor_shortest)
+
+                final_width = int(round(orig_width * scale_factor))
+                final_height = int(round(orig_height * scale_factor))
+                was_resized = True
+                image = image.resize((final_width, final_height))
+
+            # Save the (possibly resized) image into a buffer as PNG
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG")
+
+        # Otherwise, if the client has a file size limit in MB
+        elif "image_mb" in limits:
+            max_mb = limits["image_mb"]
+            # Save the original image as PNG with optimization and maximum compression
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG")
+            file_size_mb = buffer.tell() / (1024 * 1024)
+
+            # If the file size exceeds the allowed limit, predict a downscaling factor
+            if file_size_mb > max_mb:
+                # Predict the scaling factor assuming file size scales roughly with image area
+                scaling_factor = math.sqrt(max_mb / file_size_mb)
+                # Only downsample if scaling_factor < 1 (avoid upsampling)
+                if scaling_factor < 1.0:
+                    final_width = int(orig_width * scaling_factor)
+                    final_height = int(orig_height * scaling_factor)
+                    was_resized = True
+                    image = image.resize((final_width, final_height))
+                # Re-encode the resized image
+                buffer = io.BytesIO()
+                image.save(buffer, format="PNG")
+
+        else:
+            # If no image limits are defined, just encode the image as PNG.
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG")
+
+        # Return a tuple with the base64-encoded string and dimension info
+        dimensions = {
+            "original": f"{orig_width}x{orig_height}", 
+            "final": f"{final_width}x{final_height}",
+            "was_resized": was_resized
+        }
+        
+        return base64.b64encode(buffer.getvalue()).decode("utf-8"), dimensions
 
     @staticmethod
     def style_geojson_layer(geojson_layer, color=(255, 0, 0)):
@@ -854,6 +1030,61 @@ class LibreGeoLensDockWidget(QDockWidget):
                 "COGs within the rectangle have been displayed."
             )
 
+    def open_directory(self, local_dir):
+        """Open the logs directory using the default file explorer for the current OS."""
+        local_dir = os.path.abspath(local_dir)
+        
+        try:
+            if platform.system() == "Windows":
+                os.startfile(local_dir)
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(["open", local_dir], check=True)
+            else:  # Linux and other Unix-like systems
+                subprocess.run(["xdg-open", local_dir], check=True)
+        except Exception as e:
+            QMessageBox.warning(
+                self.iface.mainWindow(),
+                "Error",
+                f"Failed to open logs directory: {str(e)}"
+            )
+    
+    def show_chip_info(self):
+        """Display information about chip types and image limits."""
+        info_text = """
+<h3>Chip Types:</h3>
+<p><b>Screen Chip:</b> A screenshot of what you see in QGIS. Includes all visible layers, labels, and styling.</p>
+<p><b>Raw Chip:</b> The original imagery data extracted directly from the source (COG).
+ Contains only the raw imagery without any QGIS styling or overlays. Note that extracting large chips will be resource intensive.</p>
+
+<h3>Image Limits by MLLM Service:</h3>
+<ul>
+"""
+        # Dynamically generate limits information from supported_api_clients
+        for api_name, api_info in self.supported_api_clients.items():
+            info_text += f"<li><b>{api_name}:</b><ul>"
+            limits = api_info.get("limits", {})
+            
+            if "image_px" in limits:
+                px_limits = limits["image_px"]
+                info_text += f"<li>Max dimensions: {px_limits.get('longest_side')}px (longest side), {px_limits.get('shortest_side')}px (shortest side)</li>"
+            
+            if "image_mb" in limits:
+                info_text += f"<li>Max file size: {limits['image_mb']}MB</li>"
+                
+            info_text += "</ul></li>"
+        
+        info_text += """
+</ul>
+<p><b>Note:</b> Images will be automatically downsampled if they exceed these limits.</p>
+"""
+        
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Chip Types and Image Limits")
+        msg_box.setTextFormat(Qt.RichText)
+        msg_box.setText(info_text)
+        msg_box.setIcon(QMessageBox.Information)
+        msg_box.exec_()
+
     def update_model_choices(self):
         """Update the model list based on the selected API."""
         api = self.api_selection.currentText()
@@ -878,9 +1109,19 @@ class LibreGeoLensDockWidget(QDockWidget):
         )
 
         if reply == QMessageBox.Yes:
+
+            reply = QMessageBox.question(
+                self,
+                "Confirm Delete Chips",
+                "Do you want to delete the features & chips associated with this chat (if any)? "
+                "Only the ones that haven't been used in other chats will be deleted.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+
             modified_logs = False
             # Delete chat and get chips to remove from log layer
-            for image_path, chip_id in self.logs_db.delete_chat(chat_id):
+            for image_path, chip_id in self.logs_db.delete_chat(chat_id, delete_chips=reply == QMessageBox.Yes):
                 # Remove the chip's feature from log layer
                 features_to_remove = []
                 for feature in self.log_layer.getFeatures():
@@ -898,13 +1139,13 @@ class LibreGeoLensDockWidget(QDockWidget):
                 if os.path.exists(raw_path):
                     os.remove(raw_path)
 
-            # Update UI
+            # Clear the chat display
             row = self.chat_list.row(current_item)
             self.chat_list.takeItem(row)
-            self.chat_history.clear()
-            self.image_display_widget.clear_images()
             self.current_chat_id = None
             self.conversation = []
+            self.chat_history.clear()
+            self.chat_list.setCurrentRow(-1)
 
             if modified_logs:
                 # If log layer is empty, remove from disk and create from scratch instead of saving changes
@@ -936,9 +1177,13 @@ class LibreGeoLensDockWidget(QDockWidget):
             self.send_to_mllm()
         except Exception as e:
             QMessageBox.warning(self.iface.mainWindow(), "Error", str(e))
-            self.load_chat(self.chat_list.item(self.chat_list.count() - 1))
+            self.reload_current_chat()
 
     def send_to_mllm(self):
+        if self.current_chat_id is None:
+            QMessageBox.warning(self, "Error", "Please select a chat or start a new chat before prompting.")
+            return
+
         selected_api = self.api_selection.currentText()
         selected_model = self.model_selection.currentText()
         api_key = os.getenv(selected_api.upper() + "_API_KEY")
@@ -966,6 +1211,7 @@ class LibreGeoLensDockWidget(QDockWidget):
         
         n_images = len(self.image_display_widget.images)
         chip_ids_sequence, chip_modes_sequence = [], []
+        chips_original_resolutions, chips_actual_resolutions = [], []
         send_raw = self.radio_raw.isChecked()
         
         # Process all images first before updating UI
@@ -1004,14 +1250,28 @@ class LibreGeoLensDockWidget(QDockWidget):
                             "No Overlapping COG",
                             "No raw imagery layer containing the drawn area could be found."
                         )
-                        item = self.chat_list.item(self.chat_list.count() - 1)
-                        self.chat_list.setCurrentItem(item)
-                        self.load_chat(item)
+                        self.reload_current_chat()
                         return
                         
-                    # Extract and save raw chip
                     drawn_box_geocoords = ru.get_drawn_box_geocoordinates(rectangle, cog_path)
                     chip_width, chip_height = ru.determine_chip_size(drawn_box_geocoords, cog_path)
+
+                    # Hardcoded to OpenAI since we only have OpenAI and Groq and Groq is more permissive
+                    if max(chip_width, chip_height) > 2048:
+                        reply = QMessageBox.question(
+                            self,
+                            "Confirm Chip",
+                            f"The raw chip to be extracted will be {chip_width}x{chip_height}. "
+                            f"Depending on your machine, this might be too intensive. "
+                            f"The chip might also be downscaled to comply with the MLLM service limits "
+                            f"(see the i button next to the Send Raw Chip radio button). Do you still want to proceed?",
+                            QMessageBox.Yes | QMessageBox.No,
+                            QMessageBox.No
+                        )
+                        if reply == QMessageBox.No:
+                            self.reload_current_chat()
+                            return
+
                     center_latitude = (drawn_box_geocoords.yMinimum() + drawn_box_geocoords.yMaximum()) / 2
                     center_longitude = (drawn_box_geocoords.xMinimum() + drawn_box_geocoords.xMaximum()) / 2
                     
@@ -1024,13 +1284,24 @@ class LibreGeoLensDockWidget(QDockWidget):
                     )
                     self.save_image_to_logs(image_to_send, chip_ids_sequence[-1], raw=True)
                 
+                # Get image base64 and dimensions
+                image_base64, dimensions = self.load_image_base64_downscale_if_needed(raw_image_path, selected_api)
+                chips_original_resolutions.append(dimensions["original"])
+                chips_actual_resolutions.append(dimensions["final"])
+                
                 self.conversation[-1]["content"].append(
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{self.load_image_base64(raw_image_path)}"}}
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}}
                 )
             else:
                 chip_modes_sequence.append("screen")
+                
+                # Get image base64 and dimensions
+                image_base64, dimensions = self.load_image_base64_downscale_if_needed(image_path, selected_api)
+                chips_original_resolutions.append(dimensions["original"])
+                chips_actual_resolutions.append(dimensions["final"])
+                
                 self.conversation[-1]["content"].append(
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{self.load_image_base64(image_path)}"}}
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}}
                 )
             
             # Create image thumbnail HTML - use file:// URL instead of base64 to reduce HTML size
@@ -1078,9 +1349,12 @@ class LibreGeoLensDockWidget(QDockWidget):
                     # Convert local image paths to base64
                     image_path = content["path"]
                     if os.path.exists(image_path):
+                        # Get image base64 and dimensions (we collect dimensions for conversation history, 
+                        # though we don't save them when loading past conversations since they're already saved)
+                        image_base64, dimensions = self.load_image_base64_downscale_if_needed(image_path, selected_api)
                         processed_content.append({
                             "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{self.load_image_base64(image_path)}"}
+                            "image_url": {"url": f"data:image/png;base64,{image_base64}"}
                         })
                 else:
                     processed_content.append(content)
@@ -1133,6 +1407,8 @@ class LibreGeoLensDockWidget(QDockWidget):
             chips_sequence=chip_ids_sequence,
             mllm_service=selected_api, mllm_model=selected_model,
             chips_mode_sequence=chip_modes_sequence,
+            chips_original_resolutions=chips_original_resolutions,
+            chips_actual_resolutions=chips_actual_resolutions
         )
         self.logs_db.add_new_interaction_to_chat(self.current_chat_id, interaction_id)
 
@@ -1181,7 +1457,375 @@ class LibreGeoLensDockWidget(QDockWidget):
         settings_dialog.sync_local_logs_dir_with_s3(self.logs_dir)
 
         # Reload chat to offload in-memory imagery in self.conversation
+        self.reload_current_chat()
+
+    def reload_current_chat(self):
         item = self.chat_list.currentItem()
         self.chat_list.setCurrentItem(item)
         self.load_chat(item)
         self.chat_history.verticalScrollBar().setValue(self.chat_history.verticalScrollBar().maximum())
+        
+    def show_quick_help(self):
+        """Display a quick help guide with workflow steps"""
+        help_text = """
+        <h2>LibreGeoLens Quick Guide</h2>
+        
+        Recommended: Read GitHub repo's <a href="https://github.com/ampsight/LibreGeoLens/tree/main?
+        tab=readme-ov-file#quickstart">Quickstart</a> and <a href="https://github.com/ampsight/LibreGeoLens/
+        tree/main?tab=readme-ov-file#more-features">More Features</a> sections
+        
+        <h3>Basic Workflow:</h3>
+        <ol>
+            <li><b>Load basemap layer</b>:
+                <ul>
+                    <li>Load a basemap layer</li>
+                    <li>This is optional but very helpful, specially when working with GeoJSON COG outlines (see below)</li>
+                </ul>
+            </li>
+            <li><b>Load imagery</b>:
+                <ul>
+                    <li>Open your local georeferenced imagery directly with QGIS or click
+                     <b>Load GeoJSON</b> to load COG image outlines (red polygons)</li>
+                    <li>Choose <b>Use Demo Resources</b> if you don't have your own data</li>
+                    <li>If you want to use your own COGs, refer to the GitHub repo on how to do that</li>
+                    <li>If you used <b>Load GeoJSON</b>, zoom into one of the red polygons, click <b>Draw Area
+                     to Stream COGs</b>, and draw a rectangle over the red polygon to load the imagery</li>
+                </ul>
+            </li>
+            <li><b>Extract an image chip</b>:
+                <ul>
+                    <li>Zoom to an area of interest</li>
+                    <li>Click <b>Draw Area to Chip Imagery</b> and draw a rectangle to extract that area</li>
+                    <li>The extracted chip will appear in the image area above the "Send to MLLM" button</li>
+                </ul>
+            </li>
+            <li><b>Ask about the imagery</b>:
+                <ul>
+                    <li>Choose whether to send a <b>Screen Chip</b> (what you see) or <b>Raw Chip</b> (original data)</li>
+                    <li>Type your question in the prompt box</li>
+                    <li>Select the MLLM service and model</li>
+                    <li>Click <b>Send to MLLM</b> to get a response about your image</li>
+                </ul>
+            </li>
+            <li><b>Interact with results</b>:
+                <ul>
+                    <li>Click on an image in the chat to select it and highlight its location on the map</li>
+                    <li>Click <b>Select Area</b> then click on an orange rectangle to see where it was used in chats</li>
+                    <li>Double-click on image chips to view them at full size</li>
+                </ul>
+            </li>
+        </ol>
+        <h3>Tips:</h3>
+        <ul>
+            <li>Hover over buttons and UI elements to see tooltips explaining their functions</li>
+            <li>You need API keys configured in QGIS environment settings (see <i>icon</i> → Settings)</li>
+            <li>For large areas, raw chip extraction can be resource intensive</li>
+            <li>All chips are saved as GeoJSON features (orange rectangles) for easy reference</li>
+            <li>Click the "i" button by the radio buttons for info about image size limits</li>
+        </ul>
+        """
+        
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("LibreGeoLens Help")
+        msg_box.setTextFormat(Qt.RichText)
+        msg_box.setText(help_text)
+        msg_box.setIcon(QMessageBox.Information)
+        msg_box.exec_()
+        
+    def export_chat(self):
+        """Export the current chat as a self-contained HTML file and GeoJSON"""
+        if self.current_chat_id is None:
+            QMessageBox.warning(self, "Error", "Please select a chat to export.")
+            return
+            
+        # Get chat data
+        chat = self.logs_db.fetch_chat_by_id(self.current_chat_id)
+        chat_summary = chat[2]
+        interactions_sequence = json.loads(chat[1])
+        
+        # Create a timestamp for unique folder name
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_summary = ''.join(c if c.isalnum() else '_' for c in chat_summary)[:30]  # First 30 chars, alphanumeric only
+        export_folder_name = f"chat_{self.current_chat_id}_{safe_summary}_{timestamp}"
+        export_folder_path = os.path.join(self.logs_dir, "exports", export_folder_name)
+        os.makedirs(export_folder_path, exist_ok=True)
+        
+        # Create images folder inside export folder
+        images_folder_path = os.path.join(export_folder_path, "images")
+        os.makedirs(images_folder_path, exist_ok=True)
+        
+        # Collect all chips used in this chat
+        all_chip_ids = []
+        for interaction_id in interactions_sequence:
+            (_, _, _, chip_ids, _, _, chip_modes, _, _) = self.logs_db.fetch_interaction_by_id(interaction_id)
+            all_chip_ids.extend(json.loads(chip_ids))
+        
+        # Copy all chip images to the export folder
+        chip_path_mapping = {}  # Original path -> exported path mapping
+        for chip_id in all_chip_ids:
+            chip = self.logs_db.fetch_chip_by_id(chip_id)
+            if chip:
+                original_path = chip[1]
+                filename = os.path.basename(original_path)
+                exported_path = os.path.join(images_folder_path, filename)
+                
+                # Copy image file if it exists
+                if os.path.exists(original_path):
+                    shutil.copy2(original_path, exported_path)
+                    chip_path_mapping[original_path] = os.path.join("images", filename)
+                    
+                    # Check for raw version
+                    raw_path = original_path.replace("_screen.png", "_raw.png")
+                    if os.path.exists(raw_path):
+                        raw_filename = os.path.basename(raw_path)
+                        exported_raw_path = os.path.join(images_folder_path, raw_filename)
+                        shutil.copy2(raw_path, exported_raw_path)
+                        chip_path_mapping[raw_path] = os.path.join("images", raw_filename)
+        
+        # Generate HTML for the chat
+        html_content = self._generate_chat_html(interactions_sequence, chip_path_mapping)
+        
+        # Write HTML file
+        html_path = os.path.join(export_folder_path, "chat.html")
+        with open(html_path, 'w', encoding='utf-8') as html_file:
+            html_file.write(html_content)
+        
+        # Export GeoJSON features related to this chat
+        self._export_chat_geojson(export_folder_path, all_chip_ids)
+
+        self.open_directory(export_folder_path)
+        
+    def _generate_chat_html(self, interactions_sequence, chip_path_mapping):
+        """Generate a self-contained HTML representation of the chat"""
+        # HTML header with styling
+        html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LibreGeoLens Chat Export</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #333;
+        }
+        .chat-container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .user-message, .assistant-message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 8px;
+        }
+        .user-message {
+            background-color: #e6f7ff;
+            border-left: 4px solid #1890ff;
+        }
+        .assistant-message {
+            background-color: #f6ffed;
+            border-left: 4px solid #52c41a;
+        }
+        .chip-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .chip {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+        .chip img {
+            max-width: 300px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .chip-label {
+            position: absolute;
+            top: 3px;
+            right: 5px;
+            background: rgba(0,0,0,0.5);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        .resolution-label {
+            position: absolute;
+            bottom: 3px;
+            left: 5px;
+            background: rgba(0,0,0,0.5);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            font-size: 12px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>LibreGeoLens Chat Export</h1>
+        <p>Exported on: """ + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + """</p>
+    </div>
+    <div class="chat-container">
+"""
+        
+        # Add each interaction to the HTML
+        for interaction_id in interactions_sequence:
+            (_, prompt, response, chip_ids, mllm_service, mllm_model, chip_modes,
+             original_resolutions, actual_resolutions) = self.logs_db.fetch_interaction_by_id(interaction_id)
+            
+            # User message
+            html += f'<div class="user-message">\n<strong>User:</strong> {prompt}\n</div>\n'
+            
+            # Process chips
+            chip_ids_list = json.loads(chip_ids)
+            chip_modes_list = ast.literal_eval(chip_modes)
+            
+            try:
+                original_resolutions_list = ast.literal_eval(original_resolutions) if original_resolutions else []
+                actual_resolutions_list = ast.literal_eval(actual_resolutions) if actual_resolutions else []
+            except (TypeError, json.JSONDecodeError):
+                original_resolutions_list = []
+                actual_resolutions_list = []
+            
+            # Ensure lists exist and have correct length (for backward compatibility)
+            if not original_resolutions_list:
+                original_resolutions_list = ["Unknown"] * len(chip_ids_list)
+            if not actual_resolutions_list:
+                actual_resolutions_list = ["Unknown"] * len(chip_ids_list)
+            
+            # Add chip images to HTML
+            if chip_ids_list:
+                html += '<div class="chip-container">\n'
+                
+                for i, (chip_id, chip_mode) in enumerate(zip(chip_ids_list, chip_modes_list)):
+                    image_path = self.logs_db.fetch_chip_by_id(chip_id)[1]
+                    
+                    # Get mapped path (images are copied to images folder)
+                    if image_path in chip_path_mapping:
+                        relative_path = chip_path_mapping[image_path]
+                        
+                        # Get resolution information
+                        original_res = original_resolutions_list[i] if i < len(original_resolutions_list) else "Unknown"
+                        actual_res = actual_resolutions_list[i] if i < len(actual_resolutions_list) else "Unknown"
+                        
+                        # Create resolution display text
+                        resolution_text = ""
+                        if original_res != "Unknown":
+                            if original_res != actual_res:
+                                resolution_text = f"{original_res} → {actual_res}"
+                            else:
+                                resolution_text = f"{original_res}"
+                        
+                        html += f'''<div class="chip">
+    <img src="{relative_path}" alt="Image chip">
+    <span class="chip-label">{"Raw" if chip_mode == "raw" else "Screen"} Chip</span>
+    <span class="resolution-label">{resolution_text}</span>
+</div>\n'''
+                
+                html += '</div>\n'
+            
+            # Assistant response
+            html += f'<div class="assistant-message">\n<strong>{mllm_model} ({mllm_service}):</strong> {markdown.markdown(response)}\n</div>\n'
+        
+        # HTML footer
+        html += """    </div>
+    <div class="footer">
+        <p>Generated by LibreGeoLens - A QGIS plugin for experimenting with Multimodal Large Language Models to analyze remote sensing imagery</p>
+    </div>
+</body>
+</html>"""
+        
+        return html
+    
+    def _export_chat_geojson(self, export_folder_path, chip_ids):
+        """Export GeoJSON features related to this chat"""
+        # Get chat data to know which interactions belong to this chat
+        chat = self.logs_db.fetch_chat_by_id(self.current_chat_id)
+        interactions_sequence = json.loads(chat[1])
+        chat_interaction_ids = [str(id) for id in interactions_sequence]  # Convert to strings for comparison
+        
+        # Create a new GeoJSON object with just the features associated with chip_ids
+        geojson_features = []
+        
+        # Collect features from log layer associated with this chat
+        for feature in self.log_layer.getFeatures():
+            feature_chip_id = feature["ChipId"]
+            if feature_chip_id is not None and int(feature_chip_id) in chip_ids:
+                # Convert QGIS feature to GeoJSON feature
+                geometry = feature.geometry()
+                if geometry:
+                    geojson_geometry = json.loads(geometry.asJson())
+                    
+                    # Convert attributes to properties
+                    properties = {}
+                    for field in self.log_layer.fields():
+                        field_name = field.name()
+                        field_value = feature[field_name]
+                        
+                        # Filter interactions to only include those from this chat
+                        if field_name == "Interactions":
+                            if field_value and isinstance(field_value, str):
+                                try:
+                                    interactions_dict = json.loads(field_value)
+                                    # Only keep interactions that belong to this chat
+                                    filtered_interactions = {}
+                                    for interaction_id, interaction_data in interactions_dict.items():
+                                        if interaction_id in chat_interaction_ids:
+                                            filtered_interactions[interaction_id] = interaction_data
+                                    field_value = filtered_interactions
+                                except json.JSONDecodeError:
+                                    field_value = {}
+                            elif isinstance(field_value, dict):
+                                # Filter the dictionary directly
+                                filtered_interactions = {}
+                                for interaction_id, interaction_data in field_value.items():
+                                    if interaction_id in chat_interaction_ids:
+                                        filtered_interactions[interaction_id] = interaction_data
+                                field_value = filtered_interactions
+                            else:
+                                field_value = {}
+                        
+                        properties[field_name] = field_value
+                    
+                    # Create GeoJSON feature
+                    geojson_feature = {
+                        "type": "Feature",
+                        "geometry": geojson_geometry,
+                        "properties": properties
+                    }
+                    
+                    geojson_features.append(geojson_feature)
+        
+        # Create final GeoJSON
+        geojson = {
+            "type": "FeatureCollection",
+            "features": geojson_features
+        }
+        
+        # Save GeoJSON file
+        geojson_path = os.path.join(export_folder_path, "chat_features.geojson")
+        with open(geojson_path, 'w', encoding='utf-8') as geojson_file:
+            json.dump(geojson, geojson_file, indent=2)

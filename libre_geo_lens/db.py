@@ -1,20 +1,71 @@
 import json
 import sqlite3
+import logging
 
 
 class LogsDB:
+    # Current database schema version
+    CURRENT_VERSION = 1
+    
     def __init__(self, db_path):
         self.db_path = db_path
+        self.logger = logging.getLogger(__name__)
 
     def initialize_database(self):
-        conn = sqlite3.connect(self.db_path)
+        """Initialize the database or migrate it if necessary"""
+        # Check if database exists and needs migration
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Check if SchemaVersion table exists
+            cursor.execute("""
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name='SchemaVersion'
+            """)
+            schema_version_exists = cursor.fetchone() is not None
+            
+            if not schema_version_exists:
+                # New database or old version without versioning
+                self._setup_new_database(conn, cursor)
+            else:
+                # Check current version and migrate if needed
+                cursor.execute("SELECT version FROM SchemaVersion")
+                current_version = cursor.fetchone()[0]
+                
+                if current_version < self.CURRENT_VERSION:
+                    self._migrate_database(conn, cursor, current_version)
+            
+            conn.close()
+            
+        except sqlite3.Error as e:
+            self.logger.error(f"Database initialization error: {e}")
+            raise
+    
+    def _setup_new_database(self, conn, cursor):
+        """Set up a new database or add versioning to existing one"""
         # Enable WAL mode for better performance with concurrent reads/writes
         conn.execute("PRAGMA journal_mode=WAL")
         # Ensure synchronous mode is set for best performance while maintaining integrity
         conn.execute("PRAGMA synchronous=NORMAL")
         
-        cursor = conn.cursor()
-
+        # Check if tables already exist (old database without versioning)
+        cursor.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name='Chips'
+        """)
+        tables_exist = cursor.fetchone() is not None
+        
+        if not tables_exist:
+            # Create tables for a new database
+            self._create_tables(conn, cursor)
+        else:
+            # Existing database without versioning - check structure and migrate if needed
+            self.logger.info("Found existing database without versioning. Adding version tracking.")
+            self._add_version_tracking(conn, cursor)
+    
+    def _create_tables(self, conn, cursor):
+        """Create all database tables for a fresh installation"""
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Chips (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,7 +82,9 @@ class LogsDB:
                 chips_sequence TEXT NOT NULL,
                 mllm_service TEXT NOT NULL,
                 mllm_model TEXT NOT NULL,
-                chips_mode_sequence TEXT NOT NULL
+                chips_mode_sequence TEXT NOT NULL,
+                chips_original_resolutions TEXT,
+                chips_actual_resolutions TEXT
             )
         """)
 
@@ -47,9 +100,87 @@ class LogsDB:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_chip_id ON Chips(id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_chat_id ON Chats(id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_interaction_id ON Interactions(id)")
-
+        
+        # Create version tracking table
+        cursor.execute("""
+            CREATE TABLE SchemaVersion (
+                version INTEGER NOT NULL
+            )
+        """)
+        
+        # Insert current version
+        cursor.execute("INSERT INTO SchemaVersion (version) VALUES (?)", (self.CURRENT_VERSION,))
+        
         conn.commit()
-        conn.close()
+        self.logger.info(f"Created new database with schema version {self.CURRENT_VERSION}")
+    
+    def _add_version_tracking(self, conn, cursor):
+        """Add version tracking to an existing database"""
+        # Check the structure to determine version
+        try:
+            # Check if Interactions table has chips_original_resolutions and chips_actual_resolutions
+            cursor.execute("PRAGMA table_info(Interactions)")
+            columns = {column[1] for column in cursor.fetchall()}
+            
+            # Create version tracking table
+            cursor.execute("""
+                CREATE TABLE SchemaVersion (
+                    version INTEGER NOT NULL
+                )
+            """)
+            
+            # Determine version based on structure
+            if 'chips_original_resolutions' in columns and 'chips_actual_resolutions' in columns:
+                cursor.execute("INSERT INTO SchemaVersion (version) VALUES (?)", (self.CURRENT_VERSION,))
+                self.logger.info(f"Added version tracking to existing database - current version: {self.CURRENT_VERSION}")
+            else:
+                # Old structure, needs migration
+                cursor.execute("INSERT INTO SchemaVersion (version) VALUES (?)", (0,))
+                self.logger.info("Added version tracking to existing database - needs migration from version 0")
+                # Perform migration to latest version
+                self._migrate_database(conn, cursor, 0)
+            
+            conn.commit()
+        except sqlite3.Error as e:
+            self.logger.error(f"Error adding version tracking: {e}")
+            conn.rollback()
+            raise
+    
+    def _migrate_database(self, conn, cursor, from_version):
+        """Migrate database from specified version to current version"""
+        self.logger.info(f"Migrating database from version {from_version} to {self.CURRENT_VERSION}")
+        
+        try:
+            # Apply all necessary migrations in sequence
+            if from_version < 1:
+                self._migrate_to_v1(conn, cursor)
+            
+            # Update schema version
+            cursor.execute("UPDATE SchemaVersion SET version = ?", (self.CURRENT_VERSION,))
+            conn.commit()
+            self.logger.info(f"Database successfully migrated to version {self.CURRENT_VERSION}")
+        except sqlite3.Error as e:
+            self.logger.error(f"Migration error: {e}")
+            conn.rollback()
+            raise
+    
+    def _migrate_to_v1(self, conn, cursor):
+        """Migrate database to version 1"""
+        self.logger.info("Applying migration to version 1")
+        
+        # Check if we need to add the chips_original_resolutions and chips_actual_resolutions columns
+        cursor.execute("PRAGMA table_info(Interactions)")
+        columns = {column[1] for column in cursor.fetchall()}
+        
+        if 'chips_original_resolutions' not in columns:
+            cursor.execute("ALTER TABLE Interactions ADD COLUMN chips_original_resolutions TEXT")
+            self.logger.info("Added chips_original_resolutions column to Interactions table")
+        
+        if 'chips_actual_resolutions' not in columns:
+            cursor.execute("ALTER TABLE Interactions ADD COLUMN chips_actual_resolutions TEXT")
+            self.logger.info("Added chips_actual_resolutions column to Interactions table")
+        
+        conn.commit()
 
     def save_chip(self, image_path, geocoords):
         conn = sqlite3.connect(self.db_path)
@@ -65,14 +196,17 @@ class LogsDB:
         conn.close()
         return chip_id
 
-    def save_interaction(self, text_input, text_output, chips_sequence, mllm_service, mllm_model, chips_mode_sequence):
+    def save_interaction(self, text_input, text_output, chips_sequence, mllm_service, mllm_model, 
+                       chips_mode_sequence, chips_original_resolutions=None, chips_actual_resolutions=None):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
         cursor.execute("""
-            INSERT INTO Interactions (text_input, text_output, chips_sequence, mllm_service, mllm_model, chips_mode_sequence)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (text_input, text_output, str(chips_sequence), mllm_service, mllm_model, str(chips_mode_sequence)))
+            INSERT INTO Interactions (text_input, text_output, chips_sequence, mllm_service, mllm_model, 
+                                     chips_mode_sequence, chips_original_resolutions, chips_actual_resolutions)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (text_input, text_output, str(chips_sequence), mllm_service, mllm_model, 
+              str(chips_mode_sequence), str(chips_original_resolutions), str(chips_actual_resolutions)))
 
         interaction_id = cursor.lastrowid
         conn.commit()
@@ -190,7 +324,7 @@ class LogsDB:
         conn.close()
 
 
-    def delete_chat(self, chat_id):
+    def delete_chat(self, chat_id, delete_chips):
         """Delete a chat and its associated data"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -199,37 +333,40 @@ class LogsDB:
         cursor.execute("SELECT interactions_sequence FROM Chats WHERE id = ?", (chat_id,))
         interactions_sequence = json.loads(cursor.fetchone()[0])
 
-        # Get chips associated with these interactions
-        chips_to_check = set()
-        for interaction_id in interactions_sequence:
-            cursor.execute("SELECT chips_sequence FROM Interactions WHERE id = ?", (interaction_id,))
-            chips_sequence = json.loads(cursor.fetchone()[0])
-            chips_to_check.update(chips_sequence)
-
-        # For each chip, check if it's used in other chats' interactions
-        chips_to_delete = set()
-        for chip_id in chips_to_check:
-            is_used = False
-            # Get all interactions from other chats
-            cursor.execute("SELECT interactions_sequence FROM Chats WHERE id != ?", (chat_id,))
-            other_chats_interactions = []
-            for chat in cursor.fetchall():
-                other_chats_interactions.extend(json.loads(chat[0]))
-
-            # Get chips from those interactions
-            for interaction_id in other_chats_interactions:
+        if delete_chips:
+            # Get chips associated with these interactions
+            chips_to_check = set()
+            for interaction_id in interactions_sequence:
                 cursor.execute("SELECT chips_sequence FROM Interactions WHERE id = ?", (interaction_id,))
-                other_interaction = cursor.fetchone()
-                other_chips = json.loads(other_interaction[0])
-                if chip_id in other_chips:
-                    is_used = True
-                    break
-            if not is_used:
-                chips_to_delete.add(chip_id)
-                cursor.execute("SELECT image_path FROM Chips WHERE id = ?", (chip_id,))
-                image_path = cursor.fetchone()[0]
-                # Return image paths for deletion
-                yield image_path, chip_id
+                chips_sequence = json.loads(cursor.fetchone()[0])
+                chips_to_check.update(chips_sequence)
+
+            # For each chip, check if it's used in other chats' interactions
+            chips_to_delete = set()
+            for chip_id in chips_to_check:
+                is_used = False
+                # Get all interactions from other chats
+                cursor.execute("SELECT interactions_sequence FROM Chats WHERE id != ?", (chat_id,))
+                other_chats_interactions = []
+                for chat in cursor.fetchall():
+                    other_chats_interactions.extend(json.loads(chat[0]))
+
+                # Get chips from those interactions
+                for interaction_id in other_chats_interactions:
+                    cursor.execute("SELECT chips_sequence FROM Interactions WHERE id = ?", (interaction_id,))
+                    other_interaction = cursor.fetchone()
+                    other_chips = json.loads(other_interaction[0])
+                    if chip_id in other_chips:
+                        is_used = True
+                        break
+                if not is_used:
+                    chips_to_delete.add(chip_id)
+                    cursor.execute("SELECT image_path FROM Chips WHERE id = ?", (chip_id,))
+                    image_path = cursor.fetchone()[0]
+                    # Return image paths for deletion
+                    yield image_path, chip_id
+        else:
+            chips_to_delete = []
 
         # Delete interactions
         for interaction_id in interactions_sequence:

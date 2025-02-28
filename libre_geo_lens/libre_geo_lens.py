@@ -21,6 +21,13 @@ class LibreGeoLens:
     def add_action(self, name, icon_resource_str, fn_to_connect):
         action = QAction(QIcon(icon_resource_str), name, self.iface.mainWindow())
         action.triggered.connect(fn_to_connect)
+        
+        # Add tooltips to main plugin icons
+        if name == "Run":
+            action.setToolTip("Launch LibreGeoLens - Chat with MLLMs about your geospatial imagery")
+        elif name == "Settings":
+            action.setToolTip("Configure LibreGeoLens settings")
+            
         self.iface.addToolBarIcon(action)
         self.iface.addPluginToMenu(self.name, action)
         self.actions.append(action)
