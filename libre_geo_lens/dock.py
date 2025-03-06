@@ -26,7 +26,7 @@ from .custom_qt import (zoom_to_and_flash_feature, CustomTextBrowser, ImageDispl
                         AreaDrawingTool, IdentifyDrawnAreaTool)
 
 from qgis.PyQt.QtGui import QPixmap, QImage, QColor, QTextOption, QPalette
-from qgis.PyQt.QtCore import QBuffer, QByteArray, Qt, QSettings, QVariant, QSize
+from qgis.PyQt.QtCore import QBuffer, QByteArray, Qt, QSettings, QVariant, QSize, QTimer
 from qgis.PyQt.QtWidgets import (QSizePolicy, QFileDialog, QMessageBox, QInputDialog, QComboBox, QLabel, QVBoxLayout,
                                  QPushButton, QWidget, QTextEdit, QApplication, QRadioButton, QHBoxLayout, QDockWidget,
                                  QSplitter, QListWidget, QListWidgetItem, QDialog, QTextBrowser)
@@ -323,8 +323,10 @@ class LibreGeoLensDockWidget(QDockWidget):
             # If there are no chats, this is likely the first time the plugin is used
             # Show the quick help and then start a new chat
             QApplication.processEvents()  # Ensure UI is fully loaded
-            self.show_quick_help()
             self.start_new_chat()
+
+            # Show help dialog after a slight delay to allow UI to fully initialize
+            QTimer.singleShot(300, lambda: self.show_quick_help(first_time=True))
         else:
             self.chat_list.setCurrentItem(item)
             self.load_chat(item)
@@ -1507,7 +1509,7 @@ class LibreGeoLensDockWidget(QDockWidget):
         self.load_chat(item)
         self.chat_history.verticalScrollBar().setValue(self.chat_history.verticalScrollBar().maximum())
         
-    def show_quick_help(self):
+    def show_quick_help(self, first_time=False):
         """Display a quick help guide with workflow steps in a non-modal dialog"""
         help_text = """
         <h2>LibreGeoLens Quick Guide</h2>
@@ -1579,6 +1581,10 @@ class LibreGeoLensDockWidget(QDockWidget):
         self.help_dialog = QDialog(self)
         self.help_dialog.setWindowTitle("LibreGeoLens Help")
         self.help_dialog.resize(600, 700)  # Set a reasonable size
+
+        # If this is the first-time display (on plugin startup), make it stay on top
+        if first_time:
+            self.help_dialog.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint)
 
         # Create layout
         layout = QVBoxLayout()
