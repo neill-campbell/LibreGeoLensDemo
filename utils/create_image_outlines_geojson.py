@@ -30,7 +30,7 @@ def list_files_in_s3_directory(s3_directory, file_extensions=None):
     s3 = boto3.client("s3")
     bucket, prefix = parse_s3_path(s3_directory)
     paginator = s3.get_paginator("list_objects_v2")
-    page_iterator = paginator.paginate(Bucket=bucket, Prefix=prefix)
+    page_iterator = paginator.paginate(Bucket=bucket, Prefix=prefix, RequestPayer='requester')
 
     files = []
     for page in page_iterator:

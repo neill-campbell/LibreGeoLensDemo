@@ -29,7 +29,7 @@ from qgis.PyQt.QtGui import QPixmap, QImage, QColor, QTextOption, QPalette
 from qgis.PyQt.QtCore import QBuffer, QByteArray, Qt, QSettings, QVariant, QSize
 from qgis.PyQt.QtWidgets import (QSizePolicy, QFileDialog, QMessageBox, QInputDialog, QComboBox, QLabel, QVBoxLayout,
                                  QPushButton, QWidget, QTextEdit, QApplication, QRadioButton, QHBoxLayout, QDockWidget,
-                                 QSplitter, QListWidget, QListWidgetItem)
+                                 QSplitter, QListWidget, QListWidgetItem, QDialog, QTextBrowser)
 from qgis.core import (QgsVectorLayer, QgsRasterLayer, QgsSymbol, QgsSimpleLineSymbolLayer, QgsUnitTypes,
                        QgsRectangle, QgsWkbTypes, QgsProject, QgsGeometry, QgsMapRendererParallelJob, QgsFeature,
                        QgsField, QgsVectorFileWriter, QgsCoordinateReferenceSystem, QgsCoordinateTransform,
@@ -47,6 +47,8 @@ class LibreGeoLensDockWidget(QDockWidget):
 
         self.current_chat_id = None
         self.conversation = []
+        self.help_dialog = None
+        self.info_dialog = None
 
         settings = QSettings("Ampsight", "LibreGeoLens")
 
@@ -354,6 +356,15 @@ class LibreGeoLensDockWidget(QDockWidget):
         if self.current_highlighted_button:
             self.current_highlighted_button.setStyleSheet("")
             self.current_highlighted_button = None
+
+        # Close any open dialogs
+        if self.help_dialog is not None:
+            self.help_dialog.close()
+            self.help_dialog = None
+
+        if self.info_dialog is not None:
+            self.info_dialog.close()
+            self.info_dialog = None
 
         self.image_display_widget.clear_images()
 
@@ -1049,7 +1060,7 @@ class LibreGeoLensDockWidget(QDockWidget):
             )
     
     def show_chip_info(self):
-        """Display information about chip types and image limits."""
+        """Display information about chip types and image limits in a non-modal dialog."""
         info_text = """
 <h3>Chip Types:</h3>
 <p><b>Screen Chip:</b> A screenshot of what you see in QGIS. Includes all visible layers, labels, and styling.</p>
@@ -1077,13 +1088,44 @@ class LibreGeoLensDockWidget(QDockWidget):
 </ul>
 <p><b>Note:</b> Images will be automatically downsampled if they exceed these limits.</p>
 """
+
+        # Check if we already have an open info dialog
+        if self.info_dialog is not None:
+            # If dialog exists, just make sure it's visible and bring to front
+            self.info_dialog.show()
+            self.info_dialog.raise_()
+            self.info_dialog.activateWindow()
+            return
+
+        # Create a new dialog
+        self.info_dialog = QDialog(self)
+        self.info_dialog.setWindowTitle("Chip Types and Image Limits")
+        self.info_dialog.resize(500, 400)  # Set a reasonable size
+
+        # Create layout
+        layout = QVBoxLayout()
         
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Chip Types and Image Limits")
-        msg_box.setTextFormat(Qt.RichText)
-        msg_box.setText(info_text)
-        msg_box.setIcon(QMessageBox.Information)
-        msg_box.exec_()
+        # Create text browser for rich text display
+        text_browser = QTextBrowser()
+        text_browser.setHtml(info_text)
+        layout.addWidget(text_browser)
+
+        # Add a close button
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(self.info_dialog.close)
+        layout.addWidget(close_button)
+
+        self.info_dialog.setLayout(layout)
+
+        # Handle dialog closure to reset the reference
+        self.info_dialog.finished.connect(self.on_info_dialog_closed)
+
+        # Show the dialog non-modally
+        self.info_dialog.show()
+
+    def on_info_dialog_closed(self):
+        """Reset the info_dialog reference when the dialog is closed"""
+        self.info_dialog = None
 
     def update_model_choices(self):
         """Update the model list based on the selected API."""
@@ -1466,7 +1508,7 @@ class LibreGeoLensDockWidget(QDockWidget):
         self.chat_history.verticalScrollBar().setValue(self.chat_history.verticalScrollBar().maximum())
         
     def show_quick_help(self):
-        """Display a quick help guide with workflow steps"""
+        """Display a quick help guide with workflow steps in a non-modal dialog"""
         help_text = """
         <h2>LibreGeoLens Quick Guide</h2>
         
@@ -1524,25 +1566,57 @@ class LibreGeoLensDockWidget(QDockWidget):
             <li>Click the "i" button by the radio buttons for info about image size limits</li>
         </ul>
         """
-        
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("LibreGeoLens Help")
-        msg_box.setTextFormat(Qt.RichText)
-        msg_box.setText(help_text)
-        msg_box.setIcon(QMessageBox.Information)
-        msg_box.exec_()
-        
+
+        # Check if we already have an open help dialog
+        if self.help_dialog is not None:
+            # If dialog exists, just make sure it's visible and bring to front
+            self.help_dialog.show()
+            self.help_dialog.raise_()
+            self.help_dialog.activateWindow()
+            return
+
+        # Create a new dialog
+        self.help_dialog = QDialog(self)
+        self.help_dialog.setWindowTitle("LibreGeoLens Help")
+        self.help_dialog.resize(600, 700)  # Set a reasonable size
+
+        # Create layout
+        layout = QVBoxLayout()
+
+        # Create text browser for rich text display
+        text_browser = QTextBrowser()
+        text_browser.setOpenExternalLinks(True)  # Allow opening links
+        text_browser.setHtml(help_text)
+        layout.addWidget(text_browser)
+
+        # Add a close button
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(self.help_dialog.close)
+        layout.addWidget(close_button)
+
+        self.help_dialog.setLayout(layout)
+
+        # Handle dialog closure to reset the reference
+        self.help_dialog.finished.connect(self.on_help_dialog_closed)
+
+        # Show the dialog non-modally
+        self.help_dialog.show()
+
+    def on_help_dialog_closed(self):
+        """Reset the help_dialog reference when the dialog is closed"""
+        self.help_dialog = None
+
     def export_chat(self):
         """Export the current chat as a self-contained HTML file and GeoJSON"""
         if self.current_chat_id is None:
             QMessageBox.warning(self, "Error", "Please select a chat to export.")
             return
-            
+
         # Get chat data
         chat = self.logs_db.fetch_chat_by_id(self.current_chat_id)
         chat_summary = chat[2]
         interactions_sequence = json.loads(chat[1])
-        
+
         # Create a timestamp for unique folder name
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_summary = ''.join(c if c.isalnum() else '_' for c in chat_summary)[:30]  # First 30 chars, alphanumeric only
