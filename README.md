@@ -16,6 +16,13 @@ A QGIS plugin for experimenting with Multimodal Large Language Models (MLLMs) to
 
 ## Prerequisites
 
+### QGIS Installation
+
+1. Navigate to the [QGIS Download Page](https://qgis.org/download/)
+2. Use the Online (OSGeo4W) Installer, "Express Install" when prompted
+3. Select https://download.osgeo.ord when prompted for a download site
+4. When prompted with a checkbox list of four items to download, only QGIS (the first option) is necessary
+
 ### MLLM Services
 
 Right now the plugin only supports [OpenAI](https://platform.openai.com/docs/quickstart) (paid)
@@ -27,7 +34,24 @@ and add at least one of the following environment variables:
 
 Make sure to restart QGIS so that these changes take effect.
 
-### Python Dependencies
+## Quickstart
+
+1. Make sure you have followed the instructions for the MLLM services above.
+2. Go to `Plugins` > `Manage and Install Plugins...` -> `Settings` -> `Show also Experimental Plugins` -> `All` ->
+   search for "LibreGeoLens", and click `Install Experimental Plugin`. Restart QGIS if needed.
+3. Load a basemap layer. See [this](https://www.giscourse.com/quickmapservices-plugin-an-easy-way-to-add-basemaps-in-qgis/) for an example of one way to do it. Google Road is a nice one to start with.
+4. Click on the <img src="libre_geo_lens/resources/icons/icon.png" width="20" height="20"> icon on the top right to start 
+   the plugin, which will be docked to your right.
+5. Click on the `Load GeoJSON` button, choose `Use Demo Resources` and click `Ok`.
+6. You will see three red polygons over the US. Zoom into one of them, click on the `Draw Area to Stream COGs` button,
+   and draw an area that intersects with one of them (click once on the map to start drawing and a second time to finish). 
+   The COG will be displayed.
+7. Zoom into the image and find something you want to chat with the MLLM about.
+8. Click on the `Draw Area to Chip Imagery` button, draw the area the same way you did before,
+   and you'll see the chip above the `Send to MLLM` button.
+9. Type a prompt and click on the `Send to MLLM` button to start a conversation.
+
+### Troubleshooting Python Dependencies
 
 The plugin also needs external Python dependencies. It will try to install them automatically, but if it fails, you will need to do so manually,
 by downloading [requirements.txt](libre_geo_lens/requirements.txt) and following the instructions below.
@@ -121,23 +145,6 @@ to create a `.geojson` from your COGs in S3. Just run it like this:
 python create_image_outlines_geojson.py --s3_directories s3://bucket1/path/to/dir1/ s3://bucket2/path/to/dir2/ 
 ```
 The script will find all the COGs nested inside `--s3_directories` and create the GeoJSON with their outlines and their S3 paths.
-
-## Quickstart
-
-1. Make sure you have followed the instructions for the prerequisites above.
-2. Go to `Plugins` > `Manage and Install Plugins...` -> `Settings` -> `Show also Experimental Plugins` -> `All` ->
-   search for "LibreGeoLens", and click `Install Experimental Plugin`. Restart QGIS if needed.
-3. Load a basemap layer. See [this](https://www.giscourse.com/quickmapservices-plugin-an-easy-way-to-add-basemaps-in-qgis/) for an example of one way to do it. Google Road is a nice one to start with.
-4. Click on the <img src="libre_geo_lens/resources/icons/icon.png" width="20" height="20"> icon on the top right to start 
-   the plugin, which will be docked to your right.
-5. Click on the `Load GeoJSON` button, choose `Use Demo Resources` and click `Ok`.
-6. You will see three red polygons over the US. Zoom into one of them, click on the `Draw Area to Stream COGs` button,
-   and draw an area that intersects with one of them (click once on the map to start drawing and a second time to finish). 
-   The COG will be displayed.
-7. Zoom into the image and find something you want to chat with the MLLM about.
-8. Click on the `Draw Area to Chip Imagery` button, draw the area the same way you did before,
-   and you'll see the chip above the `Send to MLLM` button.
-9. Type a prompt and click on the `Send to MLLM` button to start a conversation.
 
 ## More Features
 
