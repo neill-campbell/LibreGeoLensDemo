@@ -20,7 +20,7 @@ A QGIS plugin for experimenting with Multimodal Large Language Models (MLLMs) to
 
 1. Navigate to the [QGIS Download Page](https://qgis.org/download/)
 2. Use the Online (OSGeo4W) Installer, "Express Install" when prompted
-3. Select https://download.osgeo.ord when prompted for a download site
+3. Select https://download.osgeo.org when prompted for a download site
 4. When prompted with a checkbox list of four items to download, only QGIS (the first option) is necessary
 
 ### MLLM Services
