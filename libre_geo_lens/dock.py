@@ -247,8 +247,8 @@ class LibreGeoLensDockWidget(QDockWidget):
                 }
             },
             "Groq": {
-                "class": Groq,
-                "models": ["llama-3.2-90b-vision-preview", "llama-3.2-11b-vision-preview"],
+                "class": Groq,  # https://console.groq.com/docs/vision
+                "models": ["meta-llama/llama-4-maverick-17b-128e-instruct", "meta-llama/llama-4-scout-17b-16e-instruct"],
                 "limits": {
                     "image_mb": 4
                 }

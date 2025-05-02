@@ -13,7 +13,7 @@ about=LibreGeoLens is an experimental QGIS plugin that integrates Multimodal Lar
  See a demo here: https://github.com/ampsight/LibreGeoLens/blob/main/resources/media/demo.gif
 
  This plugin has some prerequisites. Please go through https://github.com/ampsight/LibreGeoLens?tab=readme-ov-file#Prerequisites. After you install it, you might get an error about external Python dependencies. Try restarting QGIS and if that does not solve the issue, you'll need to install them manually by following https://github.com/ampsight/LibreGeoLens?tab=readme-ov-file#python-dependencies.
-version=0.4
+version=0.5
 author=Ampsight
 email=pedro.uria@ampsight.com
 
@@ -26,6 +26,8 @@ tracker=https://github.com/ampsight/LibreGeoLens/issues
 repository=https://github.com/ampsight/LibreGeoLens
 
 changelog=
+      0.5
+        * Replaced Groq llama models with newer LLama versions since the older ones were deprecated.
       0.4
         * Added optimizations around how chips are handled in the chats, how they are sent to the MLLM service, as well as database indexes.
         * Added option to export chats to self-contained htmls, including the chips and a `.geojson` subset of the chips' features.

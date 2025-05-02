@@ -202,5 +202,8 @@ ln -s /absolute/local/path/to/LibreGeoLens/libre_geo_lens ~/.local/share/QGIS/QG
 
 ## Publishing
 
-See [here](https://plugins.qgis.org/publish/). Copy [LICENSE](LICENSE) into [libre_geo_lens](libre_geo_lens),
-make sure to remove the __pycache__, zip it, and upload it.
+Increase the version in [metadata.txt](libre_geo_lens/metadata.txt) and add to the changelog, copy [LICENSE](LICENSE)
+into [libre_geo_lens](libre_geo_lens), make sure to remove the __pycache__, zip it, and upload it
+[here](https://plugins.qgis.org/plugins/libre_geo_lens/#plugin-versions) via `+ Add version` button.
+
+See [here](https://plugins.qgis.org/publish/) for the official documentation.
