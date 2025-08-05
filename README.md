@@ -4,9 +4,9 @@ A QGIS plugin for experimenting with Multimodal Large Language Models (MLLMs) to
 
 ## NOTE: The self hosted option expects the following env variables be added under settings, options, system, enviornment
 
-SELFHOSTED_URL (URL of self hosted endpoint)
-SELFHOSTED_MODELS (comma delim model list e.g. model_1, model_2)
-SELFHOSTED_API_KEY (In most cases this can just be any string e.g. EMPTY)
+- SELFHOSTED_URL (URL of self hosted endpoint)
+- SELFHOSTED_MODELS (comma delim model list e.g. model_1, model_2)
+- SELFHOSTED_API_KEY (In most cases this can just be any string e.g. EMPTY)
 
 
 ## Demo (click on the image)
