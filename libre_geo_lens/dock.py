@@ -252,6 +252,14 @@ class LibreGeoLensDockWidget(QDockWidget):
                 "limits": {
                     "image_mb": 4
                 }
+            },
+            "SelfHosted": {
+                "class": lambda api_key: OpenAI(api_key=api_key, base_url=os.environ.get("SELFHOSTED_URL")),
+                "models": (os.environ.get("SELFHOSTED_MODELS") if os.environ.get("SELFHOSTED_MODELS") else "").split(','),
+                "limits": {
+                    "longest_side": 2048,
+                    "shortest_side": 768
+                }
             }
         }
         api_model_layout = QVBoxLayout()
